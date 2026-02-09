@@ -16,6 +16,7 @@ The codebase is derived from `electron-react-boilerplate` but is now focused on 
 
 - **Electron** – cross‑platform desktop shell
 - **React + TypeScript** – renderer UI
+- **Tailwind CSS v4** – utility-first styling with PostCSS
 - **Webpack** – bundling and dev tooling
 - **Jest + React Testing Library** – unit tests
 - **Playwright** – end‑to‑end tests (`e2e/` directory)
@@ -65,6 +66,8 @@ npm run package
 
 - `src/main` – Electron main process, IPC handlers, app lifecycle
 - `src/renderer` – React UI (dispensing log, quick dispense, settings, etc.)
+  - `tailwind.css` – Tailwind CSS entry point (imported first in `index.tsx`)
+  - `App.scss` – custom styles and accessibility overrides
 - `src/shared` – shared types and IPC channel definitions
 - `e2e/` – Playwright tests for login, dispensing, inventory
 - `docs/` – regulatory and security documentation
@@ -74,6 +77,8 @@ npm run package
 - `QUICK_DISPENSE_IMPLEMENTATION.md` – detailed quick‑dispense integration notes
 
 See those documents for deeper implementation details.
+
+**Note on CSS**: Tailwind CSS is imported directly in `src/renderer/index.tsx` before `App.scss` to ensure proper CSS cascade. The PostCSS configuration (`postcss.config.js`) processes Tailwind directives using `@tailwindcss/postcss` plugin.
 
 ---
 
