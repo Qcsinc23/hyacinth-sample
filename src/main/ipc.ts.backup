@@ -1,0 +1,120 @@
+import { ipcMain } from 'electron';
+import * as db from './database/operations';
+
+export const registerIpcHandlers = () => {
+  // Staff handlers
+  ipcMain.handle('staff:verify', async (_, pin: string) => {
+    return db.verifyStaffPIN(pin);
+  });
+
+  ipcMain.handle('staff:getAll', async () => {
+    return db.getStaffMembers();
+  });
+
+  ipcMain.handle('staff:add', async (_, data: { name: string; pin: string; role: string }) => {
+    return db.addStaffMember(data.name, data.pin, data.role);
+  });
+
+  // Patient handlers
+  ipcMain.handle('patient:search', async (_, query: string) => {
+    return db.searchPatients(query);
+  });
+
+  ipcMain.handle('patient:getByChart', async (_, chartNumber: string) => {
+    return db.getPatientByChartNumber(chartNumber);
+  });
+
+  ipcMain.handle('patient:getById', async (_, id: number) => {
+    return db.getPatientById(id);
+  });
+
+  ipcMain.handle('patient:create', async (_, data: any) => {
+    return db.createPatient(data);
+  });
+
+  // Medication handlers
+  ipcMain.handle('medication:getAll', async () => {
+    return db.getMedications();
+  });
+
+  ipcMain.handle('medication:getById', async (_, id: number) => {
+    return db.getMedicationById(id);
+  });
+
+  // Inventory handlers
+  ipcMain.handle('inventory:getByMedication', async (_, medicationId: number) => {
+    return db.getInventoryByMedication(medicationId);
+  });
+
+  ipcMain.handle('inventory:getLotDetails', async (_, inventoryId: number) => {
+    return db.getInventoryLotDetails(inventoryId);
+  });
+
+  ipcMain.handle('inventory:receive', async (_, data: any) => {
+    return db.receiveInventory(data);
+  });
+
+  ipcMain.handle('inventory:adjust', async (_, data: any) => {
+    return db.adjustInventory(data);
+  });
+
+  ipcMain.handle('inventory:getAll', async () => {
+    return db.getAllInventory();
+  });
+
+  ipcMain.handle('inventory:getDashboard', async () => {
+    return db.getInventoryDashboard();
+  });
+
+  // Dispensing handlers
+  ipcMain.handle('dispensing:create', async (_, data: any) => {
+    return db.createDispensingRecord(data);
+  });
+
+  ipcMain.handle('dispensing:getAll', async (_, filters: any) => {
+    return db.getDispensingRecords(filters);
+  });
+
+  ipcMain.handle('dispensing:getById', async (_, id: number) => {
+    return db.getDispensingRecordById(id);
+  });
+
+  ipcMain.handle('dispensing:void', async (_, data: { record_id: number; voided_by: number; reason: string }) => {
+    return db.voidDispensingRecord(data);
+  });
+
+  // Alert handlers
+  ipcMain.handle('alerts:get', async (_, resolved = false) => {
+    return db.getInventoryAlerts(resolved);
+  });
+
+  ipcMain.handle('alerts:resolve', async (_, alertId: number, resolvedBy: number) => {
+    return db.resolveAlert(alertId, resolvedBy);
+  });
+
+  ipcMain.handle('alerts:check', async () => {
+    return db.checkAndCreateAlerts();
+  });
+
+  // Report handlers
+  ipcMain.handle('reports:dailySummary', async (_, date: string) => {
+    return db.getDailySummary(date);
+  });
+
+  ipcMain.handle('reports:patientHistory', async (_, patientId: number) => {
+    return db.getPatientHistory(patientId);
+  });
+
+  // Draft handlers
+  ipcMain.handle('draft:save', async (_, type: string, data: any, userId?: number) => {
+    return db.saveDraft(type, data, userId);
+  });
+
+  ipcMain.handle('draft:get', async (_, type: string, userId?: number) => {
+    return db.getDraft(type, userId);
+  });
+
+  ipcMain.handle('draft:delete', async (_, type: string, userId?: number) => {
+    return db.deleteDraft(type, userId);
+  });
+};

@@ -1,0 +1,573 @@
+import { getDatabase } from './schema';
+
+// Staff Operations
+export const verifyStaffPIN = (pin: string) => {
+  const db = getDatabase();
+  return db.prepare(
+    'SELECT id, name, role FROM staff_members WHERE pin = ? AND is_active = 1'
+  ).get(pin);
+};
+
+export const getStaffMembers = () => {
+  const db = getDatabase();
+  return db.prepare(
+    'SELECT id, name, role, is_active FROM staff_members ORDER BY name'
+  ).all();
+};
+
+export const addStaffMember = (name: string, pin: string, role: string) => {
+  const db = getDatabase();
+  const result = db.prepare(
+    'INSERT INTO staff_members (name, pin, role) VALUES (?, ?, ?)'
+  ).run(name, pin, role);
+  return result.lastInsertRowid;
+};
+
+// Patient Operations
+export const searchPatients = (query: string) => {
+  const db = getDatabase();
+  const searchTerm = `%${query}%`;
+  return db.prepare(`
+    SELECT id, chart_number, first_name, last_name, date_of_birth, phone
+    FROM patients
+    WHERE chart_number LIKE ? 
+       OR first_name LIKE ? 
+       OR last_name LIKE ?
+       OR (first_name || ' ' || last_name) LIKE ?
+    AND is_active = 1
+    ORDER BY last_name, first_name
+    LIMIT 20
+  `).all(searchTerm, searchTerm, searchTerm, searchTerm);
+};
+
+export const getPatientByChartNumber = (chartNumber: string) => {
+  const db = getDatabase();
+  return db.prepare(
+    'SELECT * FROM patients WHERE chart_number = ? AND is_active = 1'
+  ).get(chartNumber);
+};
+
+export const getPatientById = (id: number) => {
+  const db = getDatabase();
+  return db.prepare(
+    'SELECT * FROM patients WHERE id = ?'
+  ).get(id);
+};
+
+export const createPatient = (patient: {
+  chart_number: string;
+  first_name: string;
+  last_name: string;
+  date_of_birth?: string;
+  phone?: string;
+  email?: string;
+  address?: string;
+  notes?: string;
+}) => {
+  const db = getDatabase();
+  const result = db.prepare(`
+    INSERT INTO patients (chart_number, first_name, last_name, date_of_birth, phone, email, address, notes)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    patient.chart_number,
+    patient.first_name,
+    patient.last_name,
+    patient.date_of_birth || null,
+    patient.phone || null,
+    patient.email || null,
+    patient.address || null,
+    patient.notes || null
+  );
+  return result.lastInsertRowid;
+};
+
+// Medication Operations
+export const getMedications = () => {
+  const db = getDatabase();
+  return db.prepare(
+    'SELECT * FROM medications WHERE is_active = 1 ORDER BY name'
+  ).all();
+};
+
+export const getMedicationById = (id: number) => {
+  const db = getDatabase();
+  return db.prepare(
+    'SELECT * FROM medications WHERE id = ?'
+  ).get(id);
+};
+
+// Inventory Operations
+export const getInventoryByMedication = (medicationId: number) => {
+  const db = getDatabase();
+  return db.prepare(`
+    SELECT i.*, m.name as medication_name
+    FROM inventory i
+    JOIN medications m ON i.medication_id = m.id
+    WHERE i.medication_id = ? 
+      AND i.quantity_remaining > 0 
+      AND i.is_active = 1
+      AND i.expiration_date > date('now')
+    ORDER BY i.expiration_date ASC
+  `).all(medicationId);
+};
+
+export const getInventoryLotDetails = (inventoryId: number) => {
+  const db = getDatabase();
+  return db.prepare(`
+    SELECT i.*, m.name as medication_name
+    FROM inventory i
+    JOIN medications m ON i.medication_id = m.id
+    WHERE i.id = ?
+  `).get(inventoryId);
+};
+
+export const receiveInventory = (data: {
+  medication_id: number;
+  lot_number: string;
+  expiration_date: string;
+  quantity_received: number;
+  date_received: string;
+  received_by: number;
+  supplier?: string;
+  notes?: string;
+}) => {
+  const db = getDatabase();
+  
+  const result = db.prepare(`
+    INSERT INTO inventory (medication_id, lot_number, expiration_date, quantity_received, quantity_remaining, date_received, received_by, supplier, notes)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    data.medication_id,
+    data.lot_number,
+    data.expiration_date,
+    data.quantity_received,
+    data.quantity_received,
+    data.date_received,
+    data.received_by,
+    data.supplier || null,
+    data.notes || null
+  );
+
+  const inventoryId = result.lastInsertRowid;
+
+  // Create transaction record
+  db.prepare(`
+    INSERT INTO inventory_transactions (inventory_id, transaction_type, quantity_change, quantity_before, quantity_after, performed_by, notes)
+    VALUES (?, 'receive', ?, 0, ?, ?, ?)
+  `).run(inventoryId, data.quantity_received, data.quantity_received, data.received_by, data.notes);
+
+  return inventoryId;
+};
+
+export const adjustInventory = (data: {
+  inventory_id: number;
+  quantity_adjustment: number;
+  reason: string;
+  performed_by: number;
+}) => {
+  const db = getDatabase();
+  
+  const current = db.prepare('SELECT quantity_remaining FROM inventory WHERE id = ?').get(data.inventory_id) as { quantity_remaining: number };
+  const newQuantity = current.quantity_remaining + data.quantity_adjustment;
+
+  db.prepare('UPDATE inventory SET quantity_remaining = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
+    .run(newQuantity, data.inventory_id);
+
+  db.prepare(`
+    INSERT INTO inventory_transactions (inventory_id, transaction_type, quantity_change, quantity_before, quantity_after, performed_by, notes)
+    VALUES (?, 'adjust', ?, ?, ?, ?, ?)
+  `).run(data.inventory_id, data.quantity_adjustment, current.quantity_remaining, newQuantity, data.performed_by, data.reason);
+
+  return true;
+};
+
+export const getAllInventory = () => {
+  const db = getDatabase();
+  return db.prepare(`
+    SELECT i.*, m.name as medication_name, m.generic_name
+    FROM inventory i
+    JOIN medications m ON i.medication_id = m.id
+    WHERE i.is_active = 1
+    ORDER BY m.name, i.expiration_date
+  `).all();
+};
+
+export const getInventoryDashboard = () => {
+  const db = getDatabase();
+  return db.prepare(`
+    SELECT 
+      m.id as medication_id,
+      m.name as medication_name,
+      m.generic_name,
+      COALESCE(SUM(i.quantity_remaining), 0) as total_quantity,
+      COUNT(DISTINCT CASE WHEN i.quantity_remaining > 0 THEN i.id END) as active_lots,
+      MIN(CASE WHEN i.quantity_remaining > 0 THEN i.expiration_date END) as earliest_expiration
+    FROM medications m
+    LEFT JOIN inventory i ON m.id = i.medication_id AND i.is_active = 1
+    WHERE m.is_active = 1
+    GROUP BY m.id, m.name, m.generic_name
+    ORDER BY m.name
+  `).all();
+};
+
+// Dispensing Operations
+export const createDispensingRecord = (data: {
+  record_number: string;
+  patient_id: number;
+  dispensed_by: number;
+  reason?: string;
+  notes?: string;
+  line_items: Array<{
+    medication_id: number;
+    inventory_id: number;
+    quantity_dispensed: number;
+    lot_number: string;
+    expiration_date: string;
+    instructions?: string;
+  }>;
+}) => {
+  const db = getDatabase();
+  
+  const insertRecord = db.prepare(`
+    INSERT INTO dispensing_records (record_number, patient_id, dispensed_by, reason, notes)
+    VALUES (?, ?, ?, ?, ?)
+  `);
+
+  const insertLineItem = db.prepare(`
+    INSERT INTO dispensing_line_items (dispensing_record_id, medication_id, inventory_id, quantity_dispensed, lot_number, expiration_date, instructions)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `);
+
+  const updateInventory = db.prepare(`
+    UPDATE inventory SET quantity_remaining = quantity_remaining - ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?
+  `);
+
+  const insertTransaction = db.prepare(`
+    INSERT INTO inventory_transactions (inventory_id, transaction_type, quantity_change, quantity_before, quantity_after, reference_id, reference_type, performed_by)
+    VALUES (?, 'dispense', ?, ?, ?, ?, 'dispensing_record', ?)
+  `);
+
+  const transaction = db.transaction(() => {
+    const recordResult = insertRecord.run(
+      data.record_number,
+      data.patient_id,
+      data.dispensed_by,
+      data.reason || null,
+      data.notes || null
+    );
+    const recordId = recordResult.lastInsertRowid;
+
+    for (const item of data.line_items) {
+      insertLineItem.run(
+        recordId,
+        item.medication_id,
+        item.inventory_id,
+        item.quantity_dispensed,
+        item.lot_number,
+        item.expiration_date,
+        item.instructions || null
+      );
+
+      const currentInventory = db.prepare('SELECT quantity_remaining FROM inventory WHERE id = ?').get(item.inventory_id) as { quantity_remaining: number };
+      const newQuantity = currentInventory.quantity_remaining - item.quantity_dispensed;
+
+      updateInventory.run(item.quantity_dispensed, item.inventory_id);
+
+      insertTransaction.run(
+        item.inventory_id,
+        -item.quantity_dispensed,
+        currentInventory.quantity_remaining,
+        newQuantity,
+        recordId,
+        data.dispensed_by
+      );
+    }
+
+    return recordId;
+  });
+
+  return transaction();
+};
+
+export const getDispensingRecords = (filters: {
+  patient_id?: number;
+  startDate?: string;
+  endDate?: string;
+  status?: string;
+  limit?: number;
+  offset?: number;
+}) => {
+  const db = getDatabase();
+  
+  let query = `
+    SELECT 
+      dr.*,
+      p.chart_number,
+      p.first_name || ' ' || p.last_name as patient_name,
+      sm.name as dispensed_by_name
+    FROM dispensing_records dr
+    JOIN patients p ON dr.patient_id = p.id
+    JOIN staff_members sm ON dr.dispensed_by = sm.id
+    WHERE 1=1
+  `;
+  
+  const params: any[] = [];
+
+  if (filters.patient_id) {
+    query += ' AND dr.patient_id = ?';
+    params.push(filters.patient_id);
+  }
+  if (filters.startDate) {
+    query += ' AND DATE(dr.dispensed_at) >= ?';
+    params.push(filters.startDate);
+  }
+  if (filters.endDate) {
+    query += ' AND DATE(dr.dispensed_at) <= ?';
+    params.push(filters.endDate);
+  }
+  if (filters.status) {
+    query += ' AND dr.status = ?';
+    params.push(filters.status);
+  }
+
+  query += ' ORDER BY dr.dispensed_at DESC';
+
+  if (filters.limit) {
+    query += ' LIMIT ?';
+    params.push(filters.limit);
+    if (filters.offset) {
+      query += ' OFFSET ?';
+      params.push(filters.offset);
+    }
+  }
+
+  return db.prepare(query).all(...params);
+};
+
+export const getDispensingRecordById = (id: number) => {
+  const db = getDatabase();
+  const record = db.prepare(`
+    SELECT 
+      dr.*,
+      p.chart_number,
+      p.first_name || ' ' || p.last_name as patient_name,
+      p.date_of_birth,
+      p.phone,
+      sm.name as dispensed_by_name
+    FROM dispensing_records dr
+    JOIN patients p ON dr.patient_id = p.id
+    JOIN staff_members sm ON dr.dispensed_by = sm.id
+    WHERE dr.id = ?
+  `).get(id);
+
+  if (record) {
+    (record as any).line_items = db.prepare(`
+      SELECT 
+        dli.*,
+        m.name as medication_name,
+        m.generic_name,
+        m.dosing_instructions
+      FROM dispensing_line_items dli
+      JOIN medications m ON dli.medication_id = m.id
+      WHERE dli.dispensing_record_id = ?
+    `).all(id);
+  }
+
+  return record;
+};
+
+export const voidDispensingRecord = (data: {
+  record_id: number;
+  voided_by: number;
+  reason: string;
+}) => {
+  const db = getDatabase();
+
+  const transaction = db.transaction(() => {
+    // Get line items to restore inventory
+    const lineItems = db.prepare(
+      'SELECT inventory_id, quantity_dispensed FROM dispensing_line_items WHERE dispensing_record_id = ?'
+    ).all(data.record_id) as Array<{ inventory_id: number; quantity_dispensed: number }>;
+
+    // Restore inventory
+    for (const item of lineItems) {
+      const currentInventory = db.prepare('SELECT quantity_remaining FROM inventory WHERE id = ?').get(item.inventory_id) as { quantity_remaining: number };
+      const newQuantity = currentInventory.quantity_remaining + item.quantity_dispensed;
+
+      db.prepare('UPDATE inventory SET quantity_remaining = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
+        .run(newQuantity, item.inventory_id);
+
+      db.prepare(`
+        INSERT INTO inventory_transactions (inventory_id, transaction_type, quantity_change, quantity_before, quantity_after, reference_id, reference_type, performed_by, notes)
+        VALUES (?, 'return', ?, ?, ?, ?, 'void_dispensing', ?, ?)
+      `).run(item.inventory_id, item.quantity_dispensed, currentInventory.quantity_remaining, newQuantity, data.record_id, data.voided_by, 'Void: ' + data.reason);
+    }
+
+    // Update record status
+    db.prepare(`
+      UPDATE dispensing_records 
+      SET status = 'voided', voided_by = ?, voided_at = CURRENT_TIMESTAMP, void_reason = ?, updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `).run(data.voided_by, data.reason, data.record_id);
+
+    return true;
+  });
+
+  return transaction();
+};
+
+// Alerts Operations
+export const getInventoryAlerts = (resolved = false) => {
+  const db = getDatabase();
+  return db.prepare(`
+    SELECT 
+      ia.*,
+      m.name as medication_name,
+      i.lot_number,
+      i.expiration_date,
+      i.quantity_remaining
+    FROM inventory_alerts ia
+    LEFT JOIN medications m ON ia.medication_id = m.id
+    LEFT JOIN inventory i ON ia.inventory_id = i.id
+    WHERE ia.is_resolved = ?
+    ORDER BY ia.created_at DESC
+  `).all(resolved ? 1 : 0);
+};
+
+export const resolveAlert = (alertId: number, resolvedBy: number) => {
+  const db = getDatabase();
+  db.prepare(`
+    UPDATE inventory_alerts 
+    SET is_resolved = 1, resolved_by = ?, resolved_at = CURRENT_TIMESTAMP 
+    WHERE id = ?
+  `).run(resolvedBy, alertId);
+  return true;
+};
+
+export const checkAndCreateAlerts = () => {
+  const db = getDatabase();
+
+  // Check for low stock (less than 30)
+  const lowStock = db.prepare(`
+    SELECT i.id as inventory_id, i.medication_id, i.quantity_remaining
+    FROM inventory i
+    WHERE i.quantity_remaining > 0 AND i.quantity_remaining < 30 AND i.is_active = 1
+      AND NOT EXISTS (
+        SELECT 1 FROM inventory_alerts ia 
+        WHERE ia.inventory_id = i.id AND ia.alert_type = 'low_stock' AND ia.is_resolved = 0
+      )
+  `).all();
+
+  for (const item of lowStock as any[]) {
+    db.prepare(`
+      INSERT INTO inventory_alerts (inventory_id, medication_id, alert_type, message)
+      VALUES (?, ?, 'low_stock', ?)
+    `).run(item.inventory_id, item.medication_id, `Low stock: ${item.quantity_remaining} remaining`);
+  }
+
+  // Check for expiring medications
+  const expiring30 = db.prepare(`
+    SELECT i.id as inventory_id, i.medication_id, i.expiration_date
+    FROM inventory i
+    WHERE i.quantity_remaining > 0 AND i.is_active = 1
+      AND i.expiration_date <= date('now', '+30 days') AND i.expiration_date > date('now')
+      AND NOT EXISTS (
+        SELECT 1 FROM inventory_alerts ia 
+        WHERE ia.inventory_id = i.id AND ia.alert_type = 'expiring_30' AND ia.is_resolved = 0
+      )
+  `).all();
+
+  for (const item of expiring30 as any[]) {
+    db.prepare(`
+      INSERT INTO inventory_alerts (inventory_id, medication_id, alert_type, message)
+      VALUES (?, ?, 'expiring_30', ?)
+    `).run(item.inventory_id, item.medication_id, `Expires in 30 days: ${item.expiration_date}`);
+  }
+
+  // Check for expired medications
+  const expired = db.prepare(`
+    SELECT i.id as inventory_id, i.medication_id, i.expiration_date
+    FROM inventory i
+    WHERE i.quantity_remaining > 0 AND i.is_active = 1
+      AND i.expiration_date <= date('now')
+      AND NOT EXISTS (
+        SELECT 1 FROM inventory_alerts ia 
+        WHERE ia.inventory_id = i.id AND ia.alert_type = 'expired' AND ia.is_resolved = 0
+      )
+  `).all();
+
+  for (const item of expired as any[]) {
+    db.prepare(`
+      INSERT INTO inventory_alerts (inventory_id, medication_id, alert_type, message)
+      VALUES (?, ?, 'expired', ?)
+    `).run(item.inventory_id, item.medication_id, `Expired: ${item.expiration_date}`);
+  }
+
+  return { lowStock: lowStock.length, expiring30: expiring30.length, expired: expired.length };
+};
+
+// Reports
+export const getDailySummary = (date: string) => {
+  const db = getDatabase();
+  return db.prepare(`
+    SELECT 
+      COUNT(DISTINCT dr.id) as total_dispensings,
+      COUNT(DISTINCT dr.patient_id) as unique_patients,
+      COUNT(dli.id) as total_items,
+      SUM(dli.quantity_dispensed) as total_quantity
+    FROM dispensing_records dr
+    LEFT JOIN dispensing_line_items dli ON dr.id = dli.dispensing_record_id
+    WHERE DATE(dr.dispensed_at) = ? AND dr.status = 'active'
+  `).get(date);
+};
+
+export const getPatientHistory = (patientId: number) => {
+  const db = getDatabase();
+  return db.prepare(`
+    SELECT 
+      dr.*,
+      sm.name as dispensed_by_name,
+      (SELECT COUNT(*) FROM dispensing_line_items WHERE dispensing_record_id = dr.id) as item_count
+    FROM dispensing_records dr
+    JOIN staff_members sm ON dr.dispensed_by = sm.id
+    WHERE dr.patient_id = ? AND dr.status = 'active'
+    ORDER BY dr.dispensed_at DESC
+  `).all(patientId);
+};
+
+// Auto-save drafts
+export const saveDraft = (type: string, data: any, userId?: number) => {
+  const db = getDatabase();
+  const existing = db.prepare('SELECT id FROM auto_save_drafts WHERE draft_type = ? AND created_by = ?').get(type, userId || null);
+  
+  if (existing) {
+    db.prepare(`
+      UPDATE auto_save_drafts SET draft_data = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?
+    `).run(JSON.stringify(data), (existing as any).id);
+    return (existing as any).id;
+  } else {
+    const result = db.prepare(`
+      INSERT INTO auto_save_drafts (draft_type, draft_data, created_by)
+      VALUES (?, ?, ?)
+    `).run(type, JSON.stringify(data), userId || null);
+    return result.lastInsertRowid;
+  }
+};
+
+export const getDraft = (type: string, userId?: number) => {
+  const db = getDatabase();
+  const draft = db.prepare(`
+    SELECT * FROM auto_save_drafts WHERE draft_type = ? AND created_by = ?
+  `).get(type, userId || null);
+  
+  if (draft) {
+    return { ...(draft as any), draft_data: JSON.parse((draft as any).draft_data) };
+  }
+  return null;
+};
+
+export const deleteDraft = (type: string, userId?: number) => {
+  const db = getDatabase();
+  db.prepare('DELETE FROM auto_save_drafts WHERE draft_type = ? AND created_by = ?').run(type, userId || null);
+  return true;
+};

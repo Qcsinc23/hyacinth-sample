@@ -1,0 +1,310 @@
+import Database from 'better-sqlite3';
+import path from 'path';
+import { app } from 'electron';
+
+let db: Database.Database | null = null;
+
+export const getDatabase = (): Database.Database => {
+  if (!db) {
+    throw new Error('Database not initialized');
+  }
+  return db;
+};
+
+export const initializeDatabase = (): Database.Database => {
+  const dbPath = app.isPackaged
+    ? path.join(app.getPath('userData'), 'hyacinth.db')
+    : path.join(__dirname, '../../../hyacinth-dev.db');
+
+  db = new Database(dbPath);
+  db.pragma('journal_mode = WAL');
+  db.pragma('foreign_keys = ON');
+
+  createTables();
+  seedData();
+
+  return db;
+};
+
+const createTables = () => {
+  if (!db) return;
+
+  // Staff members table
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS staff_members (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      pin TEXT NOT NULL,
+      role TEXT NOT NULL CHECK(role IN ('staff', 'supervisor', 'admin')),
+      is_active INTEGER DEFAULT 1,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+
+  // Patients table
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS patients (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      chart_number TEXT UNIQUE NOT NULL,
+      first_name TEXT NOT NULL,
+      last_name TEXT NOT NULL,
+      date_of_birth DATE,
+      phone TEXT,
+      email TEXT,
+      address TEXT,
+      notes TEXT,
+      is_active INTEGER DEFAULT 1,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+
+  // Medications table
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS medications (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      generic_name TEXT,
+      category TEXT,
+      dosage_form TEXT,
+      strength TEXT,
+      dosing_instructions TEXT,
+      indications TEXT,
+      side_effects TEXT,
+      contraindications TEXT,
+      is_active INTEGER DEFAULT 1,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+
+  // Inventory table
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS inventory (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      medication_id INTEGER NOT NULL,
+      lot_number TEXT NOT NULL,
+      expiration_date DATE NOT NULL,
+      quantity_received INTEGER NOT NULL,
+      quantity_remaining INTEGER NOT NULL,
+      date_received DATE NOT NULL,
+      received_by INTEGER,
+      supplier TEXT,
+      notes TEXT,
+      is_active INTEGER DEFAULT 1,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (medication_id) REFERENCES medications(id),
+      FOREIGN KEY (received_by) REFERENCES staff_members(id),
+      UNIQUE(medication_id, lot_number)
+    );
+  `);
+
+  // Dispensing records table
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS dispensing_records (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      record_number TEXT UNIQUE NOT NULL,
+      patient_id INTEGER NOT NULL,
+      dispensed_by INTEGER NOT NULL,
+      dispensed_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      reason TEXT,
+      notes TEXT,
+      status TEXT DEFAULT 'active' CHECK(status IN ('active', 'voided', 'corrected')),
+      voided_by INTEGER,
+      voided_at DATETIME,
+      void_reason TEXT,
+      corrected_from_id INTEGER,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (patient_id) REFERENCES patients(id),
+      FOREIGN KEY (dispensed_by) REFERENCES staff_members(id),
+      FOREIGN KEY (voided_by) REFERENCES staff_members(id),
+      FOREIGN KEY (corrected_from_id) REFERENCES dispensing_records(id)
+    );
+  `);
+
+  // Dispensing line items table
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS dispensing_line_items (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      dispensing_record_id INTEGER NOT NULL,
+      medication_id INTEGER NOT NULL,
+      inventory_id INTEGER NOT NULL,
+      quantity_dispensed INTEGER NOT NULL,
+      lot_number TEXT NOT NULL,
+      expiration_date DATE NOT NULL,
+      instructions TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (dispensing_record_id) REFERENCES dispensing_records(id) ON DELETE CASCADE,
+      FOREIGN KEY (medication_id) REFERENCES medications(id),
+      FOREIGN KEY (inventory_id) REFERENCES inventory(id)
+    );
+  `);
+
+  // Inventory transactions table
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS inventory_transactions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      inventory_id INTEGER NOT NULL,
+      transaction_type TEXT NOT NULL CHECK(transaction_type IN ('receive', 'dispense', 'adjust', 'return', 'waste')),
+      quantity_change INTEGER NOT NULL,
+      quantity_before INTEGER NOT NULL,
+      quantity_after INTEGER NOT NULL,
+      reference_id INTEGER,
+      reference_type TEXT,
+      notes TEXT,
+      performed_by INTEGER,
+      performed_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (inventory_id) REFERENCES inventory(id),
+      FOREIGN KEY (performed_by) REFERENCES staff_members(id)
+    );
+  `);
+
+  // Inventory alerts table
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS inventory_alerts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      inventory_id INTEGER,
+      medication_id INTEGER,
+      alert_type TEXT NOT NULL CHECK(alert_type IN ('low_stock', 'expiring_30', 'expiring_60', 'expiring_90', 'expired')),
+      message TEXT NOT NULL,
+      is_resolved INTEGER DEFAULT 0,
+      resolved_by INTEGER,
+      resolved_at DATETIME,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (inventory_id) REFERENCES inventory(id),
+      FOREIGN KEY (medication_id) REFERENCES medications(id),
+      FOREIGN KEY (resolved_by) REFERENCES staff_members(id)
+    );
+  `);
+
+  // Audit log table
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS audit_log (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      table_name TEXT NOT NULL,
+      record_id INTEGER,
+      action TEXT NOT NULL CHECK(action IN ('INSERT', 'UPDATE', 'DELETE', 'VOID', 'CORRECT')),
+      old_values TEXT,
+      new_values TEXT,
+      performed_by INTEGER,
+      performed_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      ip_address TEXT,
+      FOREIGN KEY (performed_by) REFERENCES staff_members(id)
+    );
+  `);
+
+  // Auto-save drafts table
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS auto_save_drafts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      draft_type TEXT NOT NULL,
+      draft_data TEXT NOT NULL,
+      created_by INTEGER,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (created_by) REFERENCES staff_members(id)
+    );
+  `);
+
+  // Create indexes
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_patients_chart ON patients(chart_number);
+    CREATE INDEX IF NOT EXISTS idx_patients_name ON patients(last_name, first_name);
+    CREATE INDEX IF NOT EXISTS idx_dispensing_patient ON dispensing_records(patient_id);
+    CREATE INDEX IF NOT EXISTS idx_dispensing_date ON dispensing_records(dispensed_at);
+    CREATE INDEX IF NOT EXISTS idx_inventory_medication ON inventory(medication_id);
+    CREATE INDEX IF NOT EXISTS idx_inventory_expiration ON inventory(expiration_date);
+    CREATE INDEX IF NOT EXISTS idx_inventory_lot ON inventory(lot_number);
+    CREATE INDEX IF NOT EXISTS idx_line_items_record ON dispensing_line_items(dispensing_record_id);
+    CREATE INDEX IF NOT EXISTS idx_audit_performed ON audit_log(performed_at);
+    CREATE INDEX IF NOT EXISTS idx_alerts_type ON inventory_alerts(alert_type, is_resolved);
+  `);
+};
+
+const seedData = () => {
+  if (!db) return;
+
+  // Check if data already exists
+  const staffCount = db.prepare('SELECT COUNT(*) as count FROM staff_members').get() as { count: number };
+  if (staffCount.count > 0) return;
+
+  // Seed staff members
+  const insertStaff = db.prepare(`
+    INSERT INTO staff_members (name, pin, role) VALUES (?, ?, ?)
+  `);
+
+  insertStaff.run('Admin User', '1234', 'admin');
+  insertStaff.run('Supervisor User', '5678', 'supervisor');
+  insertStaff.run('Staff User', '0000', 'staff');
+
+  // Seed medications
+  const insertMedication = db.prepare(`
+    INSERT INTO medications (name, generic_name, category, dosage_form, strength, dosing_instructions, indications)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `);
+
+  insertMedication.run(
+    'Biktarvy',
+    'Bictegravir/Tenofovir AF/Emtricitabine',
+    'nPEP/PrEP/ID',
+    'Tablet',
+    '50mg/200mg/25mg',
+    'Take 1 tablet by mouth once daily with or without food.',
+    'HIV-1 nPEP, PrEP, and Infection'
+  );
+
+  insertMedication.run(
+    'Descovy',
+    'Emtricitabine/Tenofovir AF',
+    'PrEP',
+    'Tablet',
+    '200mg/25mg',
+    'Take 1 tablet by mouth once daily with or without food.',
+    'HIV-1 PrEP'
+  );
+
+  insertMedication.run(
+    'Symtuza',
+    'Darunavir/Cobicistat/Emtricitabine/Tenofovir AF',
+    'nPEP/ID',
+    'Tablet',
+    '800mg/150mg/200mg/10mg',
+    'Take 1 tablet by mouth once daily with food.',
+    'HIV-1 nPEP and Infection'
+  );
+
+  insertMedication.run(
+    'Dovato',
+    'Dolutegravir/Lamivudine',
+    'ID',
+    'Tablet',
+    '50mg/300mg',
+    'Take 1 tablet by mouth once daily with or without food.',
+    'HIV-1 Infection'
+  );
+
+  insertMedication.run(
+    'Bactrim',
+    'Sulfamethoxazole/Trimethoprim',
+    'Antibiotic',
+    'Tablet',
+    '800mg/160mg',
+    'Take 1 tablet by mouth twice daily or as directed.',
+    'Bacterial infections, PCP prophylaxis'
+  );
+
+  insertMedication.run(
+    'Doxycycline',
+    'Doxycycline Hyclate',
+    'Antibiotic',
+    'Capsule',
+    '100mg',
+    'Take 1 capsule by mouth twice daily or as directed. Take with food if stomach upset occurs. Avoid sun exposure.',
+    'Bacterial infections, STI prophylaxis'
+  );
+};
+
+export default { initializeDatabase, getDatabase };

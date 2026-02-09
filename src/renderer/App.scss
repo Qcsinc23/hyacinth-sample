@@ -1,0 +1,256 @@
+@import url("./tailwind.css");
+
+/* Custom styles for Hyacinth */
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+code {
+  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
+    monospace;
+}
+
+/* Scrollbar styles */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f1f1;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #c1c1c1;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #a8a8a8;
+}
+
+/* Print styles */
+@media print {
+  .no-print {
+    display: none !important;
+  }
+}
+
+/* ============================================
+   ACCESSIBILITY STYLES
+   ============================================ */
+
+/* High Contrast Mode */
+html.high-contrast {
+  filter: contrast(1.3);
+  
+  * {
+    border-color: #000 !important;
+  }
+  
+  button, .btn {
+    border: 2px solid #000 !important;
+  }
+  
+  input, select, textarea {
+    border: 2px solid #000 !important;
+  }
+  
+  a {
+    text-decoration: underline !important;
+  }
+}
+
+/* Large Text Mode */
+html.large-text {
+  font-size: 120%;
+  
+  h1, h2, h3, h4, h5, h6 {
+    font-size: 1.3em;
+  }
+  
+  .text-sm {
+    font-size: 0.95rem;
+  }
+  
+  .text-xs {
+    font-size: 0.85rem;
+  }
+  
+  input, select, textarea, button {
+    font-size: 1.1em;
+  }
+}
+
+/* Reduced Animations */
+html.reduce-animations,
+html.reduce-animations * {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+}
+
+/* Screen Reader Mode - enhanced focus indicators */
+html.screen-reader-mode {
+  *:focus {
+    outline: 3px solid #2563eb !important;
+    outline-offset: 2px !important;
+  }
+  
+  button:focus,
+  a:focus,
+  input:focus,
+  select:focus,
+  textarea:focus,
+  [tabindex]:focus {
+    outline: 3px solid #2563eb !important;
+    outline-offset: 2px !important;
+    box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.2) !important;
+  }
+  
+  /* Skip links for screen readers */
+  .skip-link {
+    position: absolute;
+    top: -40px;
+    left: 0;
+    background: #000;
+    color: #fff;
+    padding: 8px;
+    text-decoration: none;
+    z-index: 100;
+    
+    &:focus {
+      top: 0;
+    }
+  }
+}
+
+/* ============================================
+   TOUCH TARGET STYLES
+   ============================================ */
+
+/* Minimum 44x44px touch targets */
+.touch-manipulation {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Ensure interactive elements are touch-friendly */
+button,
+[role="button"],
+input,
+select,
+textarea,
+a {
+  min-height: 44px;
+  min-width: 44px;
+  touch-action: manipulation;
+}
+
+/* Larger touch targets for mobile */
+@media (pointer: coarse) {
+  button,
+  [role="button"] {
+    min-height: 48px;
+    min-width: 48px;
+    padding: 12px 16px;
+  }
+  
+  input,
+  select,
+  textarea {
+    min-height: 48px;
+    padding: 12px;
+    font-size: 16px; /* Prevent zoom on iOS */
+  }
+  
+  .touch-large {
+    min-height: 56px;
+    min-width: 56px;
+    padding: 16px 20px;
+  }
+}
+
+/* ============================================
+   ANIMATION KEYFRAMES
+   ============================================ */
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+@keyframes ping {
+  75%, 100% {
+    transform: scale(2);
+    opacity: 0;
+  }
+}
+
+@keyframes bounce {
+  0%, 100% {
+    transform: translateY(-25%);
+    animation-timing-function: cubic-bezier(0.8, 0, 1, 1);
+  }
+  50% {
+    transform: translateY(0);
+    animation-timing-function: cubic-bezier(0, 0, 0.2, 1);
+  }
+}
+
+@keyframes shrink {
+  from {
+    transform: scaleX(1);
+  }
+  to {
+    transform: scaleX(0);
+  }
+}
+
+/* Animation utility classes */
+.animate-pulse {
+  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+.animate-ping {
+  animation: ping 1s cubic-bezier(0, 0, 0.2, 1) infinite;
+}
+
+.animate-bounce {
+  animation: bounce 1s infinite;
+}
+
+/* ============================================
+   FOCUS STYLES
+   ============================================ */
+
+/* Enhanced focus styles for accessibility */
+*:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
+}
+
+/* Skip link for keyboard navigation */
+.skip-to-content {
+  position: absolute;
+  top: -40px;
+  left: 0;
+  background: #1e40af;
+  color: white;
+  padding: 8px 16px;
+  z-index: 9999;
+  transition: top 0.3s;
+  
+  &:focus {
+    top: 0;
+  }
+}

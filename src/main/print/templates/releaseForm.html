@@ -1,0 +1,565 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Hyacinth Sample Medication Release Form</title>
+  <style>
+    @media print {
+      @page {
+        size: letter;
+        margin: 0.5in;
+      }
+      body {
+        margin: 0;
+        padding: 0;
+      }
+      .no-print {
+        display: none;
+      }
+    }
+    
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body {
+      font-family: 'Arial', 'Helvetica', sans-serif;
+      font-size: 11pt;
+      line-height: 1.5;
+      color: #000;
+      background: #fff;
+      padding: 0.5in;
+      max-width: 8.5in;
+      margin: 0 auto;
+    }
+    
+    .form-container {
+      border: 2px solid #000;
+      padding: 0.3in;
+    }
+    
+    /* Header Section */
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 2px solid #000;
+      padding-bottom: 0.2in;
+      margin-bottom: 0.2in;
+    }
+    
+    .logo-section {
+      display: flex;
+      align-items: center;
+      gap: 0.2in;
+    }
+    
+    .logo-placeholder {
+      width: 1in;
+      height: 1in;
+      border: 1px dashed #999;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 8pt;
+      color: #666;
+      text-align: center;
+    }
+    
+    .clinic-header-info {
+      text-align: left;
+    }
+    
+    .clinic-title {
+      font-size: 16pt;
+      font-weight: bold;
+      color: #2c5282;
+    }
+    
+    .clinic-subtitle {
+      font-size: 10pt;
+      color: #666;
+    }
+    
+    .form-title {
+      font-size: 14pt;
+      font-weight: bold;
+      text-transform: uppercase;
+      text-align: right;
+    }
+    
+    .form-number {
+      font-size: 9pt;
+      color: #666;
+      text-align: right;
+      margin-top: 0.05in;
+    }
+    
+    /* Patient Information Section */
+    .section {
+      margin-bottom: 0.25in;
+    }
+    
+    .section-header {
+      background-color: #f0f0f0;
+      padding: 0.08in 0.15in;
+      font-weight: bold;
+      font-size: 11pt;
+      border: 1px solid #000;
+      margin-bottom: 0.1in;
+    }
+    
+    .patient-grid {
+      display: grid;
+      grid-template-columns: 2fr 1fr 1fr;
+      gap: 0.15in;
+    }
+    
+    .form-field {
+      margin-bottom: 0.1in;
+    }
+    
+    .field-label {
+      font-weight: bold;
+      font-size: 9pt;
+      text-transform: uppercase;
+      margin-bottom: 0.03in;
+    }
+    
+    .field-value {
+      border-bottom: 1px solid #000;
+      min-height: 0.25in;
+      padding: 0.05in 0;
+      font-size: 11pt;
+    }
+    
+    .field-value-empty {
+      border-bottom: 1px solid #000;
+      min-height: 0.25in;
+    }
+    
+    /* Medication Details Section */
+    .medication-box {
+      border: 2px solid #000;
+      padding: 0.15in;
+      margin-bottom: 0.15in;
+      background-color: #fafafa;
+    }
+    
+    .medication-header {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 0.1in;
+      border-bottom: 1px solid #ccc;
+      padding-bottom: 0.1in;
+    }
+    
+    .medication-name {
+      font-size: 12pt;
+      font-weight: bold;
+    }
+    
+    .medication-strength {
+      font-size: 10pt;
+      color: #666;
+    }
+    
+    .detail-row {
+      display: flex;
+      gap: 0.2in;
+      margin-bottom: 0.08in;
+    }
+    
+    .detail-item {
+      flex: 1;
+    }
+    
+    .detail-label {
+      font-weight: bold;
+      font-size: 9pt;
+    }
+    
+    .detail-value {
+      font-size: 10pt;
+    }
+    
+    /* Dosing Instructions Section */
+    .dosing-section {
+      border: 1px solid #000;
+      padding: 0.15in;
+      margin-bottom: 0.15in;
+    }
+    
+    .dosing-title {
+      font-weight: bold;
+      font-size: 10pt;
+      text-transform: uppercase;
+      margin-bottom: 0.1in;
+      border-bottom: 1px solid #ccc;
+      padding-bottom: 0.05in;
+    }
+    
+    .dosing-content {
+      font-size: 10pt;
+      line-height: 1.6;
+    }
+    
+    .dosing-subsection {
+      margin-top: 0.1in;
+    }
+    
+    .dosing-subtitle {
+      font-weight: bold;
+      font-size: 9pt;
+      text-transform: uppercase;
+      margin-bottom: 0.05in;
+    }
+    
+    .warning-box {
+      background-color: #fff3cd;
+      border: 1px solid #ffc107;
+      padding: 0.1in;
+      margin-top: 0.1in;
+    }
+    
+    .warning-title {
+      font-weight: bold;
+      color: #856404;
+      font-size: 9pt;
+      margin-bottom: 0.05in;
+    }
+    
+    .warning-list {
+      font-size: 9pt;
+      color: #856404;
+      margin: 0;
+      padding-left: 0.2in;
+    }
+    
+    .warning-list li {
+      margin-bottom: 0.03in;
+    }
+    
+    /* Signature Section */
+    .signature-section {
+      margin-top: 0.3in;
+    }
+    
+    .signature-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.3in;
+      margin-top: 0.15in;
+    }
+    
+    .signature-block {
+      border: 1px solid #000;
+      padding: 0.15in;
+      min-height: 1in;
+    }
+    
+    .signature-label {
+      font-weight: bold;
+      font-size: 9pt;
+      text-transform: uppercase;
+      margin-bottom: 0.5in;
+    }
+    
+    .signature-line {
+      border-bottom: 1px solid #000;
+      margin-top: 0.6in;
+      margin-bottom: 0.05in;
+    }
+    
+    .signature-meta {
+      display: flex;
+      justify-content: space-between;
+      font-size: 8pt;
+      color: #666;
+    }
+    
+    /* Footer */
+    .footer {
+      margin-top: 0.3in;
+      padding-top: 0.15in;
+      border-top: 1px solid #000;
+      font-size: 8pt;
+      color: #666;
+      display: flex;
+      justify-content: space-between;
+    }
+    
+    .disclaimer {
+      font-style: italic;
+      margin-top: 0.15in;
+      font-size: 8pt;
+      color: #666;
+      text-align: justify;
+    }
+    
+    /* Checkbox styling */
+    .checkbox-group {
+      margin-top: 0.1in;
+    }
+    
+    .checkbox-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 0.1in;
+      margin-bottom: 0.08in;
+      font-size: 10pt;
+    }
+    
+    .checkbox {
+      width: 0.15in;
+      height: 0.15in;
+      border: 1px solid #000;
+      margin-top: 0.03in;
+      flex-shrink: 0;
+    }
+    
+    .checkbox-label {
+      flex: 1;
+    }
+    
+    /* Print controls */
+    .print-controls {
+      position: fixed;
+      top: 10px;
+      right: 10px;
+      background: #f0f0f0;
+      padding: 10px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      z-index: 1000;
+    }
+    
+    .print-btn {
+      background: #2c5282;
+      color: white;
+      border: none;
+      padding: 8px 16px;
+      cursor: pointer;
+      border-radius: 4px;
+      font-size: 10pt;
+    }
+    
+    .print-btn:hover {
+      background: #1a365d;
+    }
+  </style>
+</head>
+<body>
+  <!-- Print Controls (hidden when printing) -->
+  <div class="print-controls no-print">
+    <button class="print-btn" onclick="window.print()">Print Form</button>
+  </div>
+
+  <div class="form-container">
+    <!-- Header -->
+    <div class="header">
+      <div class="logo-section">
+        <div class="logo-placeholder">Hyacinth<br>Logo</div>
+        <div class="clinic-header-info">
+          <div class="clinic-title">Hyacinth Health & Wellness Clinic</div>
+          <div class="clinic-subtitle">Medication Sample Release</div>
+        </div>
+      </div>
+      <div>
+        <div class="form-title">Sample Release Form</div>
+        <div class="form-number">Form #: {{formNumber}}</div>
+      </div>
+    </div>
+
+    <!-- Patient Information -->
+    <div class="section">
+      <div class="section-header">Patient Information</div>
+      <div class="patient-grid">
+        <div class="form-field">
+          <div class="field-label">Patient Name</div>
+          <div class="field-value">{{patientName}}</div>
+        </div>
+        <div class="form-field">
+          <div class="field-label">Chart Number</div>
+          <div class="field-value">{{chartNumber}}</div>
+        </div>
+        <div class="form-field">
+          <div class="field-label">Date of Birth</div>
+          <div class="field-value">{{dateOfBirth}}</div>
+        </div>
+      </div>
+      <div class="form-field" style="margin-top: 0.1in;">
+        <div class="field-label">Allergies</div>
+        <div class="field-value">{{allergies}}</div>
+      </div>
+    </div>
+
+    <!-- Medication Details -->
+    <div class="section">
+      <div class="section-header">Medication Details</div>
+      <div class="medication-box">
+        <div class="medication-header">
+          <div>
+            <div class="medication-name">{{medicationName}}</div>
+            <div class="medication-strength">{{medicationStrength}}</div>
+          </div>
+          <div style="text-align: right;">
+            <div style="font-size: 10pt;"><strong>Qty:</strong> {{quantity}} {{unit}}</div>
+            <div style="font-size: 9pt; color: #666;">{{daySupply}}-day supply</div>
+          </div>
+        </div>
+        
+        <div class="detail-row">
+          <div class="detail-item">
+            <span class="detail-label">Generic Name:</span>
+            <span class="detail-value">{{genericName}}</span>
+          </div>
+          <div class="detail-item">
+            <span class="detail-label">Indication:</span>
+            <span class="detail-value">{{indication}}</span>
+          </div>
+        </div>
+        
+        <div class="detail-row">
+          <div class="detail-item">
+            <span class="detail-label">Prescribed By:</span>
+            <span class="detail-value">{{prescribedBy}}</span>
+          </div>
+          <div class="detail-item">
+            <span class="detail-label">Prescription Date:</span>
+            <span class="detail-value">{{prescriptionDate}}</span>
+          </div>
+        </div>
+        
+        <div class="detail-row">
+          <div class="detail-item">
+            <span class="detail-label">Rx Number:</span>
+            <span class="detail-value">{{rxNumber}}</span>
+          </div>
+          <div class="detail-item">
+            <span class="detail-label">Dispense Date:</span>
+            <span class="detail-value">{{dispenseDate}}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Dosing Instructions -->
+    <div class="section">
+      <div class="section-header">Dosing Instructions</div>
+      <div class="dosing-section">
+        <div class="dosing-title">Directions for Use</div>
+        <div class="dosing-content">{{directions}}</div>
+        
+        {{#if administrationInstructions}}
+        <div class="dosing-subsection">
+          <div class="dosing-subtitle">Administration Instructions</div>
+          <div class="dosing-content">{{administrationInstructions}}</div>
+        </div>
+        {{/if}}
+        
+        {{#if drugInteractions}}
+        <div class="dosing-subsection">
+          <div class="dosing-subtitle">Drug Interactions</div>
+          <div class="dosing-content">{{drugInteractions}}</div>
+        </div>
+        {{/if}}
+        
+        {{#if renalHepaticConsiderations}}
+        <div class="dosing-subsection">
+          <div class="dosing-subtitle">Renal/Hepatic Considerations</div>
+          <div class="dosing-content">{{renalHepaticConsiderations}}</div>
+        </div>
+        {{/if}}
+        
+        {{#if warnings}}
+        <div class="warning-box">
+          <div class="warning-title">⚠️ Important Warnings</div>
+          <ul class="warning-list">
+            {{#each warnings}}
+            <li>{{this}}</li>
+            {{/each}}
+          </ul>
+        </div>
+        {{/if}}
+      </div>
+    </div>
+
+    <!-- Patient Counseling Verification -->
+    <div class="section">
+      <div class="section-header">Patient Counseling Verification</div>
+      <p style="font-size: 10pt; margin-bottom: 0.1in;">By signing below, I confirm that I have received counseling on the following:</p>
+      
+      <div class="checkbox-group">
+        <div class="checkbox-item">
+          <div class="checkbox"></div>
+          <div class="checkbox-label">Medication name and purpose</div>
+        </div>
+        <div class="checkbox-item">
+          <div class="checkbox"></div>
+          <div class="checkbox-label">How and when to take this medication</div>
+        </div>
+        <div class="checkbox-item">
+          <div class="checkbox"></div>
+          <div class="checkbox-label">Potential side effects and when to seek help</div>
+        </div>
+        <div class="checkbox-item">
+          <div class="checkbox"></div>
+          <div class="checkbox-label">Drug interactions and foods/substances to avoid</div>
+        </div>
+        <div class="checkbox-item">
+          <div class="checkbox"></div>
+          <div class="checkbox-label">Storage instructions</div>
+        </div>
+        <div class="checkbox-item">
+          <div class="checkbox"></div>
+          <div class="checkbox-label">Importance of completing the full course (if applicable)</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Signature Section -->
+    <div class="section signature-section">
+      <div class="section-header">Signatures</div>
+      <div class="signature-grid">
+        <div class="signature-block">
+          <div class="signature-label">Patient/Guardian Signature</div>
+          <p style="font-size: 8pt; color: #666; margin-bottom: 0.3in;">I acknowledge receipt of the medication and counseling provided.</p>
+          <div class="signature-line"></div>
+          <div class="signature-meta">
+            <span>Signature</span>
+            <span>Date: _______________</span>
+          </div>
+        </div>
+        <div class="signature-block">
+          <div class="signature-label">Dispensing Staff Signature</div>
+          <p style="font-size: 8pt; color: #666; margin-bottom: 0.3in;">I verify the medication and dosage are correct.</p>
+          <div class="signature-line"></div>
+          <div class="signature-meta">
+            <span>{{dispensingStaffName}}</span>
+            <span>Date: {{dispenseDate}}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Disclaimer -->
+    <div class="disclaimer">
+      This medication sample is provided as part of a bridging program for patients who meet eligibility criteria. 
+      This is not a full prescription fill. Patients must follow up with their primary care provider or specialist 
+      for ongoing medication management. In case of emergency, call 911 or go to the nearest emergency room. 
+      For questions about this medication, contact Hyacinth Health & Wellness Clinic at (862) 240-1461.
+    </div>
+
+    <!-- Footer -->
+    <div class="footer">
+      <span>Hyacinth Health & Wellness Clinic</span>
+      <span>Phone: (862) 240-1461</span>
+      <span>Form Date: {{dispenseDate}}</span>
+    </div>
+  </div>
+</body>
+</html>
