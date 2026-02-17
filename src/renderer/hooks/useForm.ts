@@ -1,15 +1,9 @@
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback } from 'react';
 
 interface FormConfig<T> {
   initialValues: T;
   validate?: (values: T) => Partial<Record<keyof T, string>>;
   onSubmit?: (values: T) => void | Promise<void>;
-}
-
-interface FormFieldState {
-  value: string;
-  error?: string;
-  touched: boolean;
 }
 
 export function useForm<T extends Record<string, any>>(config: FormConfig<T>) {

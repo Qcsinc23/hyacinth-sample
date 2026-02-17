@@ -33,6 +33,7 @@ export const STAFF_CHANNELS = {
   GET_ALL: 'staff:getAll',
   UPDATE: 'staff:update',
   VERIFY_PIN: 'staff:verifyPin',
+  CHANGE_OWN_PIN: 'staff:changeOwnPin',
   DEACTIVATE: 'staff:deactivate',
   REACTIVATE: 'staff:reactivate',
   IS_ADMIN: 'staff:isAdmin',
@@ -146,6 +147,7 @@ export const DATABASE_CHANNELS = {
   HEALTH_CHECK: 'db:healthCheck',
   GET_VERSION: 'db:getVersion',
   RUN_MIGRATIONS: 'db:runMigrations',
+  GET_INVENTORY_COUNT: 'db:getInventoryCount',
 } as const;
 
 // ============================================================================
@@ -206,6 +208,12 @@ export const INSTRUCTION_CHANNELS = {
   POPULATE_LINE_ITEM: 'instruction:populateLineItem',
   GET_AVAILABLE_CONTEXTS: 'instruction:getAvailableContexts',
   GET_ALL_TEMPLATES: 'instruction:getAllTemplates',
+  // Medication catalog queries
+  GET_MEDICATIONS_BY_CONTEXT: 'instruction:getMedicationsByContext',
+  GET_TEMPLATE_FOR_MEDICATION: 'instruction:getTemplateForMedication',
+  GET_TEMPLATES_FOR_MEDICATION: 'instruction:getTemplatesForMedication',
+  GET_CONTEXTS_FOR_MEDICATION: 'instruction:getContextsForMedication',
+  GET_ALL_MEDICATIONS_CATALOG: 'instruction:getAllMedicationsCatalog',
 } as const;
 
 // ============================================================================

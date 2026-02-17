@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Package, AlertTriangle, Clock, TrendingDown } from 'lucide-react';
+import { Package, AlertTriangle, Clock } from 'lucide-react';
 import { StockTable } from './StockTable';
 import { AlertPanel } from './AlertPanel';
 import { ReceiveStockForm } from './ReceiveStockForm';
@@ -23,33 +23,6 @@ export const InventoryDashboard: React.FC = () => {
   const lowStockItems = getLowStockItems();
   const expiringLots = getExpiringLots(30);
 
-  const stats = [
-    {
-      label: 'Total Medications',
-      value: inventory.length,
-      icon: Package,
-      color: 'bg-blue-500',
-    },
-    {
-      label: 'Low Stock Alerts',
-      value: lowStockItems.length,
-      icon: TrendingDown,
-      color: lowStockItems.length > 0 ? 'bg-red-500' : 'bg-emerald-500',
-    },
-    {
-      label: 'Expiring Soon',
-      value: expiringLots.length,
-      icon: Clock,
-      color: expiringLots.length > 0 ? 'bg-amber-500' : 'bg-emerald-500',
-    },
-    {
-      label: 'Critical Alerts',
-      value: lowStockItems.filter(i => i.totalQuantity === 0).length + expiringLots.filter(l => l.lot.expirationDate < new Date()).length,
-      icon: AlertTriangle,
-      color: 'bg-red-600',
-    },
-  ];
-
   if (activeView === 'receive') {
     return (
       <ReceiveStockForm
@@ -63,28 +36,33 @@ export const InventoryDashboard: React.FC = () => {
   }
 
   return (
-    <div className="space-y-6">
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        {stats.map((stat) => (
-          <div key={stat.label} className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-500">{stat.label}</p>
-                <p className="text-2xl font-bold text-gray-900 mt-1">
-                  {isLoading ? '-' : stat.value}
-                </p>
-              </div>
-              <div className={`${stat.color} p-3 rounded-lg`}>
-                <stat.icon className="h-5 w-5 text-white" />
-              </div>
-            </div>
+    <div className="space-y-4">
+      {/* Compact summary bar */}
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 flex items-center gap-6">
+        <div className="flex items-center gap-2 text-sm">
+          <Package className="h-4 w-4 text-blue-500" />
+          <span className="text-gray-500">Medications:</span>
+          <span className="font-semibold text-gray-900">{isLoading ? '—' : inventory.length}</span>
+        </div>
+        {lowStockItems.length > 0 && (
+          <div className="flex items-center gap-2 text-sm">
+            <AlertTriangle className="h-4 w-4 text-red-500" />
+            <span className="text-red-600 font-medium">{lowStockItems.length} low stock</span>
           </div>
-        ))}
+        )}
+        {expiringLots.length > 0 && (
+          <div className="flex items-center gap-2 text-sm">
+            <Clock className="h-4 w-4 text-amber-500" />
+            <span className="text-amber-600 font-medium">{expiringLots.length} expiring soon</span>
+          </div>
+        )}
+        {lowStockItems.length === 0 && expiringLots.length === 0 && !isLoading && (
+          <span className="text-sm text-emerald-600 font-medium">All clear</span>
+        )}
       </div>
 
-      {/* Alerts Panel */}
-      <AlertPanel />
+      {/* Alerts panel (only when there are alerts) */}
+      {(lowStockItems.length > 0 || expiringLots.length > 0) && <AlertPanel />}
 
       {/* Stock Table */}
       <StockTable

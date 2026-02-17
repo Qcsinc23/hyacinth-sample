@@ -24,7 +24,6 @@ interface SessionTimeoutWarningProps {
 }
 
 export const SessionTimeoutWarning: React.FC<SessionTimeoutWarningProps> = ({
-  timeoutMs = 5 * 60 * 1000, // 5 minutes default
   warningMs = 60 * 1000, // 1 minute warning default
   onExtendSession,
   onTimeout,

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, createContext, useContext } from 'react';
-import { X, Eye, Type, Volume2, Monitor, Moon, Sun } from 'lucide-react';
+import { X, Eye, Type, Volume2, Monitor } from 'lucide-react';
 import { Button } from './common/Button';
 
 // Accessibility preferences type

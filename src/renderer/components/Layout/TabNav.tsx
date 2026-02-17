@@ -1,5 +1,5 @@
 import React from 'react';
-import { ClipboardList, BookOpen, Package, Pill, AlertCircle, BarChart3 } from 'lucide-react';
+import { ClipboardList, BookOpen, Package, Pill, BarChart3 } from 'lucide-react';
 import type { TabId } from '../../types';
 import { useAlerts } from '../../contexts/AlertContext';
 
@@ -16,7 +16,7 @@ interface TabItem {
 }
 
 export const TabNav: React.FC<TabNavProps> = ({ activeTab, onTabChange }) => {
-  const { criticalCount, warningCount, unreadCount } = useAlerts();
+  const { criticalCount, warningCount } = useAlerts();
 
   const tabs: TabItem[] = [
     { id: 'entry', label: 'Entry Form', icon: <ClipboardList className="h-5 w-5" /> },

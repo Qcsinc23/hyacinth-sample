@@ -18,6 +18,7 @@ import type {
   MedicationTimelineEvent
 } from '../../../main/database/queries/patients';
 import type { Patient } from '../../types';
+import { sanitizeInput } from '../../utils/sanitize';
 
 interface PatientHistoryModalProps {
   patient: Patient | null;
@@ -49,11 +50,16 @@ export const PatientHistoryModal: React.FC<PatientHistoryModalProps> = ({
     if (!patient) return;
     setLoading(true);
     try {
+      if (!window.electron?.patient) {
+        throw new Error('Patient API is not available');
+      }
+      const patientApi = window.electron.patient;
+      const pid = parseInt(patient.id);
       const [historyData, summaryData, timelineData, lastDate] = await Promise.all([
-        window.electron.patient.getDispensingHistory(parseInt(patient.id)),
-        window.electron.patient.getMedicationSummary(parseInt(patient.id)),
-        window.electron.patient.getMedicationTimeline(parseInt(patient.id)),
-        window.electron.patient.getLastDispensedDate(parseInt(patient.id)),
+        patientApi.getDispensingHistory(pid),
+        patientApi.getMedicationSummary(pid),
+        patientApi.getMedicationTimeline(pid),
+        patientApi.getLastDispensedDate(pid),
       ]);
       setHistory(historyData);
       setMedicationSummary(summaryData);
@@ -114,10 +120,10 @@ export const PatientHistoryModal: React.FC<PatientHistoryModalProps> = ({
                 </div>
                 <div>
                   <h3 className="text-lg font-semibold text-white">
-                    {patient.firstName} {patient.lastName}
+                    {sanitizeInput(patient.firstName)} {sanitizeInput(patient.lastName)}
                   </h3>
                   <p className="text-blue-100 text-sm">
-                    Chart: {patient.chartNumber} • DOB: {patient.dateOfBirth.toLocaleDateString()}
+                    Chart: {sanitizeInput(patient.chartNumber)} • DOB: {patient.dateOfBirth.toLocaleDateString()}
                   </p>
                 </div>
               </div>
@@ -135,7 +141,7 @@ export const PatientHistoryModal: React.FC<PatientHistoryModalProps> = ({
                 <div className="flex items-center gap-2 text-white">
                   <AlertCircle className="w-5 h-5" />
                   <span className="font-semibold">Allergies:</span>
-                  <span>{patient.allergies.join(', ')}</span>
+                  <span>{patient.allergies.map(a => sanitizeInput(a)).join(', ')}</span>
                 </div>
               </div>
             )}
@@ -267,7 +273,7 @@ export const PatientHistoryModal: React.FC<PatientHistoryModalProps> = ({
                                 {formatDate(record.dispensingDate)}
                               </p>
                               <p className="text-xs text-gray-500">
-                                {record.medications.join(', ')}
+                                {record.medications.map(m => sanitizeInput(m)).join(', ')}
                               </p>
                             </div>
                           </div>
@@ -300,7 +306,7 @@ export const PatientHistoryModal: React.FC<PatientHistoryModalProps> = ({
                           <div className="bg-gray-50 rounded-lg p-4">
                             <div className="flex items-start justify-between">
                               <div>
-                                <p className="font-semibold text-gray-900">{event.medicationName}</p>
+                                <p className="font-semibold text-gray-900">{sanitizeInput(event.medicationName)}</p>
                                 <p className="text-sm text-gray-600 mt-1">
                                   {formatDate(event.date)} at {formatTime(event.time)}
                                 </p>
@@ -312,15 +318,15 @@ export const PatientHistoryModal: React.FC<PatientHistoryModalProps> = ({
                             <div className="mt-3 grid grid-cols-3 gap-4 text-sm">
                               <div>
                                 <p className="text-gray-500">Amount</p>
-                                <p className="font-medium text-gray-900">{event.amount}</p>
+                                <p className="font-medium text-gray-900">{sanitizeInput(event.amount)}</p>
                               </div>
                               <div>
                                 <p className="text-gray-500">Reason</p>
-                                <p className="font-medium text-gray-900">{event.reason || 'N/A'}</p>
+                                <p className="font-medium text-gray-900">{sanitizeInput(event.reason) || 'N/A'}</p>
                               </div>
                               <div>
                                 <p className="text-gray-500">By</p>
-                                <p className="font-medium text-gray-900">{event.staffName}</p>
+                                <p className="font-medium text-gray-900">{sanitizeInput(event.staffName)}</p>
                               </div>
                             </div>
                           </div>
@@ -339,7 +345,7 @@ export const PatientHistoryModal: React.FC<PatientHistoryModalProps> = ({
                       <div key={idx} className="bg-gray-50 rounded-lg p-4">
                         <div className="flex items-start justify-between">
                           <div>
-                            <p className="font-semibold text-gray-900">{med.medicationName}</p>
+                            <p className="font-semibold text-gray-900">{sanitizeInput(med.medicationName)}</p>
                             <p className="text-sm text-gray-600 mt-1">
                               Dispensed {med.totalDispenses} times
                             </p>

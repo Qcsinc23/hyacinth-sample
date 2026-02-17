@@ -178,10 +178,15 @@ export const verifyBackup = async (
         
         const requiredTables = [
           'patients',
-          'dispensing',
+          'staff_members',
+          'dispensing_records',
+          'dispensing_line_items',
+          'record_reasons',
           'inventory',
-          'alerts',
+          'inventory_transactions',
+          'inventory_alerts',
           'audit_log',
+          'app_settings',
         ];
         
         const tableNames = tables.map((t) => t.name);

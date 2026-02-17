@@ -4,3 +4,4 @@ export * from './Select';
 export * from './DatePicker';
 export * from './PinInput';
 export * from './Toast';
+export * from './ConfirmDialog';

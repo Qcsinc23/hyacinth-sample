@@ -7,6 +7,7 @@ import { getDatabase, withTransaction } from '../db';
 import type { 
   DispensingRecord, 
   DispensingLineItem, 
+  DispenseLineItemInput,
   RecordReason, 
   CreateDispenseInput, 
   VoidDispenseInput, 
@@ -14,6 +15,134 @@ import type {
   DispenseWithDetails,
   SearchResult 
 } from '../../../shared/types';
+
+const getInventoryForUpdate = (inventoryId: number): {
+  id: number;
+  medication_name: string;
+  quantity_on_hand: number;
+  status: string;
+} => {
+  const db = getDatabase();
+  const inventory = db.prepare(`
+    SELECT id, medication_name, quantity_on_hand, status
+    FROM inventory
+    WHERE id = ?
+  `).get(inventoryId) as {
+    id: number;
+    medication_name: string;
+    quantity_on_hand: number;
+    status: string;
+  } | undefined;
+
+  if (!inventory) {
+    throw new Error(`Inventory item ${inventoryId} not found`);
+  }
+
+  return inventory;
+};
+
+const deductInventoryForItems = (
+  items: Array<Pick<DispenseLineItemInput, 'inventory_id' | 'amount_value'>>,
+  staffId: number,
+  recordId: number
+): void => {
+  const db = getDatabase();
+  const now = new Date().toISOString();
+
+  for (const item of items) {
+    if (!item.inventory_id || item.amount_value <= 0) {
+      continue;
+    }
+
+    const quantity = item.amount_value;
+    const inventory = getInventoryForUpdate(item.inventory_id);
+
+    if (inventory.quantity_on_hand < quantity) {
+      throw new Error(`Insufficient inventory for ${inventory.medication_name}`);
+    }
+
+    const newQuantity = inventory.quantity_on_hand - quantity;
+
+    db.prepare(`
+      UPDATE inventory
+      SET quantity_on_hand = ?,
+          status = CASE
+            WHEN ? <= 0 THEN 'depleted'
+            ELSE status
+          END,
+          updated_at = ?
+      WHERE id = ?
+    `).run(newQuantity, newQuantity, now, item.inventory_id);
+
+    db.prepare(`
+      INSERT INTO inventory_transactions (
+        inventory_id, transaction_type, quantity_change, quantity_before,
+        quantity_after, reference_type, reference_id, reason, performed_by, timestamp
+      ) VALUES (?, 'dispense', ?, ?, ?, 'dispense', ?, 'Medication dispensed', ?, ?)
+    `).run(
+      item.inventory_id,
+      -quantity,
+      inventory.quantity_on_hand,
+      newQuantity,
+      recordId,
+      staffId,
+      now
+    );
+  }
+};
+
+const restoreInventoryForRecord = (
+  recordId: number,
+  staffId: number,
+  reason: string,
+  referenceType: 'void' | 'correction'
+): void => {
+  const db = getDatabase();
+  const now = new Date().toISOString();
+
+  const items = db.prepare(`
+    SELECT inventory_id, amount_value
+    FROM dispensing_line_items
+    WHERE record_id = ?
+  `).all(recordId) as Array<{ inventory_id: number | null; amount_value: number }>;
+
+  for (const item of items) {
+    if (!item.inventory_id || item.amount_value <= 0) {
+      continue;
+    }
+
+    const inventory = getInventoryForUpdate(item.inventory_id);
+    const newQuantity = inventory.quantity_on_hand + item.amount_value;
+
+    db.prepare(`
+      UPDATE inventory
+      SET quantity_on_hand = ?,
+          status = CASE
+            WHEN status = 'depleted' AND ? > 0 THEN 'active'
+            ELSE status
+          END,
+          updated_at = ?
+      WHERE id = ?
+    `).run(newQuantity, newQuantity, now, item.inventory_id);
+
+    db.prepare(`
+      INSERT INTO inventory_transactions (
+        inventory_id, transaction_type, quantity_change, quantity_before,
+        quantity_after, reference_type, reference_id, reason, performed_by, timestamp
+      ) VALUES (?, 'return', ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      item.inventory_id,
+      item.amount_value,
+      inventory.quantity_on_hand,
+      newQuantity,
+      referenceType,
+      recordId,
+      reason,
+      staffId,
+      now
+    );
+  }
+};
 
 /**
  * Create a new dispensing record
@@ -63,6 +192,9 @@ export function createDispense(input: CreateDispenseInput): DispensingRecord {
         item.dosing_instructions || null
       );
     }
+
+    // Deduct inventory in the same transaction so dispense + stock updates are atomic.
+    deductInventoryForItems(input.items, input.staff_id, recordId);
     
     // Insert reasons
     const reasonStmt = db.prepare(`
@@ -78,7 +210,11 @@ export function createDispense(input: CreateDispenseInput): DispensingRecord {
       );
     }
     
-    return getDispenseById(recordId)!;
+    const created = getDispenseById(recordId);
+    if (!created) {
+      throw new Error('Failed to create dispensing record: record not found after insert');
+    }
+    return created;
   });
 }
 
@@ -102,6 +238,7 @@ export function getDispenseById(id: number): DispenseWithDetails | null {
   
   if (!record) return null;
   
+  // Fetch items and reasons (single record, but consistent pattern)
   const items = db.prepare(
     'SELECT * FROM dispensing_line_items WHERE record_id = ?'
   ).all(id) as DispensingLineItem[];
@@ -148,6 +285,39 @@ export function getDispensesByPatient(patientId: number, limit = 50): DispenseWi
     LIMIT ?
   `).all(patientId, limit) as any[];
   
+  // Batch fetch all items and reasons to avoid N+1 queries
+  if (records.length === 0) {
+    return [];
+  }
+  
+  const recordIds = records.map(r => r.id);
+  const placeholders = recordIds.map(() => '?').join(',');
+  const allItems = db.prepare(`
+    SELECT * FROM dispensing_line_items 
+    WHERE record_id IN (${placeholders})
+  `).all(...recordIds) as DispensingLineItem[];
+  
+  const allReasons = db.prepare(`
+    SELECT * FROM record_reasons 
+    WHERE record_id IN (${placeholders})
+  `).all(...recordIds) as RecordReason[];
+  
+  // Group items and reasons by record_id
+  const itemsByRecordId = new Map<number, DispensingLineItem[]>();
+  const reasonsByRecordId = new Map<number, RecordReason[]>();
+  
+  for (const item of allItems) {
+    const existing = itemsByRecordId.get(item.record_id) || [];
+    existing.push(item);
+    itemsByRecordId.set(item.record_id, existing);
+  }
+  
+  for (const reason of allReasons) {
+    const existing = reasonsByRecordId.get(reason.record_id) || [];
+    existing.push(reason);
+    reasonsByRecordId.set(reason.record_id, existing);
+  }
+  
   return records.map(record => ({
     ...record,
     patient: {
@@ -162,8 +332,8 @@ export function getDispensesByPatient(patientId: number, limit = 50): DispenseWi
       first_name: record.staff_first_name,
       last_name: record.staff_last_name,
     },
-    items: db.prepare('SELECT * FROM dispensing_line_items WHERE record_id = ?').all(record.id) as DispensingLineItem[],
-    reasons: db.prepare('SELECT * FROM record_reasons WHERE record_id = ?').all(record.id) as RecordReason[],
+    items: itemsByRecordId.get(record.id) || [],
+    reasons: reasonsByRecordId.get(record.id) || [],
   })) as DispenseWithDetails[];
 }
 
@@ -230,6 +400,44 @@ export function searchDispenses(options: {
     LIMIT ? OFFSET ?
   `).all(...params, pageSize, offset) as any[];
   
+  // Batch fetch all items and reasons to avoid N+1 queries
+  const recordIds = records.map(r => r.id);
+  if (recordIds.length === 0) {
+    return {
+      data: [],
+      total: countResult.total,
+      page,
+      pageSize,
+    };
+  }
+  
+  const placeholders = recordIds.map(() => '?').join(',');
+  const allItems = db.prepare(`
+    SELECT * FROM dispensing_line_items 
+    WHERE record_id IN (${placeholders})
+  `).all(...recordIds) as DispensingLineItem[];
+  
+  const allReasons = db.prepare(`
+    SELECT * FROM record_reasons 
+    WHERE record_id IN (${placeholders})
+  `).all(...recordIds) as RecordReason[];
+  
+  // Group items and reasons by record_id
+  const itemsByRecordId = new Map<number, DispensingLineItem[]>();
+  const reasonsByRecordId = new Map<number, RecordReason[]>();
+  
+  for (const item of allItems) {
+    const existing = itemsByRecordId.get(item.record_id) || [];
+    existing.push(item);
+    itemsByRecordId.set(item.record_id, existing);
+  }
+  
+  for (const reason of allReasons) {
+    const existing = reasonsByRecordId.get(reason.record_id) || [];
+    existing.push(reason);
+    reasonsByRecordId.set(reason.record_id, existing);
+  }
+  
   const data = records.map(record => ({
     ...record,
     patient: {
@@ -243,8 +451,8 @@ export function searchDispenses(options: {
       first_name: record.staff_first_name,
       last_name: record.staff_last_name,
     },
-    items: db.prepare('SELECT * FROM dispensing_line_items WHERE record_id = ?').all(record.id) as DispensingLineItem[],
-    reasons: db.prepare('SELECT * FROM record_reasons WHERE record_id = ?').all(record.id) as RecordReason[],
+    items: itemsByRecordId.get(record.id) || [],
+    reasons: reasonsByRecordId.get(record.id) || [],
   })) as DispenseWithDetails[];
   
   return {
@@ -259,18 +467,36 @@ export function searchDispenses(options: {
  * Void a dispensing record
  */
 export function voidDispense(input: VoidDispenseInput): void {
-  const db = getDatabase();
-  const now = new Date().toISOString();
-  
-  db.prepare(`
-    UPDATE dispensing_records
-    SET status = 'voided',
-        void_reason = ?,
-        voided_by = ?,
-        voided_at = ?,
-        updated_at = ?
-    WHERE id = ?
-  `).run(input.reason, input.staff_id, now, now, input.record_id);
+  return withTransaction(() => {
+    const db = getDatabase();
+    const now = new Date().toISOString();
+
+    const existing = db.prepare(`
+      SELECT id, status
+      FROM dispensing_records
+      WHERE id = ?
+    `).get(input.record_id) as { id: number; status: string } | undefined;
+
+    if (!existing) {
+      throw new Error(`Dispensing record ${input.record_id} not found`);
+    }
+
+    if (existing.status !== 'completed') {
+      throw new Error('Only completed dispensing records can be voided');
+    }
+
+    restoreInventoryForRecord(input.record_id, input.staff_id, `Void: ${input.reason}`, 'void');
+
+    db.prepare(`
+      UPDATE dispensing_records
+      SET status = 'voided',
+          void_reason = ?,
+          voided_by = ?,
+          voided_at = ?,
+          updated_at = ?
+      WHERE id = ?
+    `).run(input.reason, input.staff_id, now, now, input.record_id);
+  });
 }
 
 /**
@@ -280,6 +506,20 @@ export function correctDispense(input: CorrectDispenseInput): DispensingRecord {
   return withTransaction(() => {
     const db = getDatabase();
     const now = new Date().toISOString();
+
+    const existing = db.prepare(`
+      SELECT id, status
+      FROM dispensing_records
+      WHERE id = ?
+    `).get(input.record_id) as { id: number; status: string } | undefined;
+
+    if (!existing) {
+      throw new Error(`Dispensing record ${input.record_id} not found`);
+    }
+
+    if (existing.status !== 'completed') {
+      throw new Error('Only completed dispensing records can be corrected');
+    }
     
     // Mark original as corrected
     db.prepare(`
@@ -290,6 +530,13 @@ export function correctDispense(input: CorrectDispenseInput): DispensingRecord {
           updated_at = ?
       WHERE id = ?
     `).run(input.staff_id, input.correction_reason, now, input.record_id);
+
+    restoreInventoryForRecord(
+      input.record_id,
+      input.staff_id,
+      `Correction: ${input.correction_reason}`,
+      'correction'
+    );
     
     // Create new record with corrected data (linked to original)
     const correctedInput = {
@@ -337,6 +584,8 @@ export function correctDispense(input: CorrectDispenseInput): DispensingRecord {
         item.dosing_instructions || null
       );
     }
+
+    deductInventoryForItems(correctedInput.items, input.staff_id, newRecordId);
     
     // Insert reasons
     const reasonStmt = db.prepare(`
@@ -352,7 +601,11 @@ export function correctDispense(input: CorrectDispenseInput): DispensingRecord {
       );
     }
     
-    return getDispenseById(newRecordId)!;
+    const corrected = getDispenseById(newRecordId);
+    if (!corrected) {
+      throw new Error('Failed to correct dispensing record: record not found after insert');
+    }
+    return corrected;
   });
 }
 

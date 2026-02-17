@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Package, Plus, RefreshCw, AlertTriangle, Calendar, Edit2 } from 'lucide-react';
+import { Package, Plus, RefreshCw, Edit2 } from 'lucide-react';
 import { Button } from '../common/Button';
 import type { MedicationStock, MedicationLot } from '../../types';
 import { AdjustStockModal } from './AdjustStockModal';

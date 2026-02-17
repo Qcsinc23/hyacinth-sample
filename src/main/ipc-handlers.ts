@@ -3,13 +3,18 @@
  * Register all IPC handlers for the main process
  */
 
-import { ipcMain } from 'electron';
+import fs from 'fs';
+import path from 'path';
+import { app, dialog, ipcMain } from 'electron';
 import * as queries from './database/queries';
-import { initDatabase, runSchema, checkDatabaseHealth, getDatabase } from './database/db';
+import { initDatabase, runSchema, checkDatabaseHealth, getDatabase, getDbPath } from './database/db';
 import { runMigrations, getMigrationStatus } from './database/migrations';
 import { runSeedData } from './database/seed';
+import { loadInventorySeed, loadMedicationCatalogSeed, getInventoryCount, isInventorySeeded } from './database/loader';
+import { createBackup, getBackupInfo } from './backup/backup';
+import { getBackupDirectory, listBackups } from './backup/scheduler';
+import { restoreFromBackup, validateBackup } from './backup/restore';
 import {
-  IPC_CHANNELS,
   PATIENT_CHANNELS,
   STAFF_CHANNELS,
   DISPENSING_CHANNELS,
@@ -27,10 +32,19 @@ import {
 import * as reportGenerator from './reports/generator';
 import { registerPrintIpcHandlers } from './services/printService';
 import instructionService from './services/instructionService';
-import type { IpcResponse } from '../shared/types';
+import type { IpcResponse, CreateDraftInput } from '../shared/types';
 
-// Helper to wrap handlers with error handling
-function handle<T>(channel: string, fn: (...args: any[]) => T | Promise<T>) {
+// Import authentication middleware
+import { requireAuth, requireAdmin, requireAuthWithStaff, createSession } from './middleware/authMiddleware';
+
+// ============================================================================
+// Helper Functions
+// ============================================================================
+
+/**
+ * Helper to wrap handlers with error handling (no auth - for public endpoints)
+ */
+function handlePublic<T>(channel: string, fn: (...args: any[]) => T | Promise<T>) {
   ipcMain.handle(channel, async (_event, ...args): Promise<IpcResponse<T>> => {
     try {
       const result = await fn(...args);
@@ -46,165 +60,244 @@ function handle<T>(channel: string, fn: (...args: any[]) => T | Promise<T>) {
 }
 
 /**
+ * Helper to wrap handlers with authentication AND error handling
+ * For PHI-related operations that require authentication
+ */
+function handleAuth<T>(channel: string, fn: (...args: any[]) => T | Promise<T>) {
+  ipcMain.handle(channel, requireAuth(fn));
+}
+
+/**
+ * Helper to wrap handlers that require admin privileges
+ */
+function handleAdmin<T>(channel: string, fn: (...args: any[]) => T | Promise<T>) {
+  ipcMain.handle(channel, requireAdmin(fn));
+}
+
+/**
+ * Helper to wrap handlers with automatic staffId injection
+ */
+function handleAuthWithStaff<T>(channel: string, fn: (staffId: number, ...args: any[]) => T | Promise<T>) {
+  ipcMain.handle(channel, requireAuthWithStaff(fn));
+}
+
+/** Strip pin_hash from staff object before sending to renderer */
+function stripPinHash<T extends { pin_hash?: string }>(staff: T): Omit<T, 'pin_hash'> {
+  const { pin_hash: _, ...rest } = staff;
+  return rest as Omit<T, 'pin_hash'>;
+}
+
+/**
  * Register all IPC handlers
  */
 export function registerIpcHandlers(): void {
   console.log('[IPC] Registering handlers...');
   
   // ==========================================================================
-  // Database Handlers
+  // Database Handlers (Public - needed for initial setup/login)
   // ==========================================================================
   
-  handle(DATABASE_CHANNELS.INITIALIZE, () => {
-    const db = initDatabase();
+  handlePublic(DATABASE_CHANNELS.INITIALIZE, () => {
+    initDatabase();
     runSchema();
     runMigrations();
     return { initialized: true };
   });
   
-  handle(DATABASE_CHANNELS.RUN_SEED, () => {
-    runSeedData();
-    return { seeded: true };
+  handlePublic(DATABASE_CHANNELS.RUN_SEED, () => {
+    // Only allow seeding in development
+    if (process.env.NODE_ENV !== 'development') {
+      return { 
+        seeded: false, 
+        error: 'Seed data can only be run in development environment' 
+      };
+    }
+    
+    try {
+      console.log('[IPC] Running seed data...');
+      runSeedData();
+      console.log('[IPC] Loading medication catalog...');
+      loadMedicationCatalogSeed();
+      console.log('[IPC] Loading inventory seed...');
+      loadInventorySeed();
+      console.log('[IPC] Seed data loaded successfully');
+      return { seeded: true };
+    } catch (error) {
+      console.error('[IPC] Seed error:', error);
+      throw error;
+    }
   });
   
-  handle(DATABASE_CHANNELS.HEALTH_CHECK, () => {
+  handlePublic(DATABASE_CHANNELS.HEALTH_CHECK, () => {
     return checkDatabaseHealth();
   });
   
-  handle(DATABASE_CHANNELS.GET_VERSION, () => {
+  handleAuth(DATABASE_CHANNELS.GET_VERSION, () => {
     return getMigrationStatus();
   });
   
-  handle(DATABASE_CHANNELS.RUN_MIGRATIONS, () => {
+  handleAdmin(DATABASE_CHANNELS.RUN_MIGRATIONS, () => {
     runMigrations();
     return getMigrationStatus();
   });
-  
+
+  handleAuth(DATABASE_CHANNELS.GET_INVENTORY_COUNT, () => {
+    const count = getInventoryCount();
+    const seeded = isInventorySeeded();
+    return { count, seeded };
+  });
+
   // ==========================================================================
-  // Patient Handlers
+  // Patient Handlers (PHI - Authentication Required)
   // ==========================================================================
 
-  handle(PATIENT_CHANNELS.CREATE, queries.createPatient);
-  handle(PATIENT_CHANNELS.GET, queries.getPatientById);
-  handle(PATIENT_CHANNELS.GET_BY_CHART, queries.getPatientByChartNumber);
-  handle(PATIENT_CHANNELS.UPDATE, queries.updatePatient);
-  handle(PATIENT_CHANNELS.DEACTIVATE, queries.deactivatePatient);
-  handle(PATIENT_CHANNELS.REACTIVATE, queries.reactivatePatient);
-  handle(PATIENT_CHANNELS.SEARCH, queries.searchPatients);
-  handle(PATIENT_CHANNELS.GET_ACTIVE, queries.getActivePatients);
-  handle(PATIENT_CHANNELS.CHECK_CHART_NUMBER, queries.isChartNumberAvailable);
-  handle(PATIENT_CHANNELS.GET_DISPENSING_HISTORY, queries.getPatientDispensingHistory);
-  handle(PATIENT_CHANNELS.GET_MEDICATION_SUMMARY, queries.getPatientMedicationSummary);
-  handle(PATIENT_CHANNELS.GET_LAST_DISPENSED_DATE, queries.getLastDispensedDate);
-  handle(PATIENT_CHANNELS.GET_MEDICATION_TIMELINE, queries.getPatientMedicationTimeline);
+  handleAuth(PATIENT_CHANNELS.CREATE, queries.createPatient);
+  handleAuth(PATIENT_CHANNELS.GET, queries.getPatientById);
+  handleAuth(PATIENT_CHANNELS.GET_BY_CHART, queries.getPatientByChartNumber);
+  handleAuth(PATIENT_CHANNELS.UPDATE, queries.updatePatient);
+  handleAuth(PATIENT_CHANNELS.DEACTIVATE, queries.deactivatePatient);
+  handleAuth(PATIENT_CHANNELS.REACTIVATE, queries.reactivatePatient);
+  handleAuth(PATIENT_CHANNELS.SEARCH, queries.searchPatients);
+  handleAuth(PATIENT_CHANNELS.GET_ACTIVE, queries.getActivePatients);
+  handleAuth(PATIENT_CHANNELS.CHECK_CHART_NUMBER, queries.isChartNumberAvailable);
+  handleAuth(PATIENT_CHANNELS.GET_DISPENSING_HISTORY, queries.getPatientDispensingHistory);
+  handleAuth(PATIENT_CHANNELS.GET_MEDICATION_SUMMARY, queries.getPatientMedicationSummary);
+  handleAuth(PATIENT_CHANNELS.GET_LAST_DISPENSED_DATE, queries.getLastDispensedDate);
+  handleAuth(PATIENT_CHANNELS.GET_MEDICATION_TIMELINE, queries.getPatientMedicationTimeline);
   
   // ==========================================================================
-  // Staff Handlers
+  // Staff Handlers (Authentication Required)
   // ==========================================================================
   
-  handle(STAFF_CHANNELS.CREATE, queries.createStaff);
-  handle(STAFF_CHANNELS.GET, queries.getStaffById);
-  handle(STAFF_CHANNELS.GET_ALL, queries.getAllStaff);
-  handle(STAFF_CHANNELS.UPDATE, queries.updateStaff);
-  handle(STAFF_CHANNELS.VERIFY_PIN, queries.verifyStaffPin);
-  handle(STAFF_CHANNELS.DEACTIVATE, queries.deactivateStaff);
-  handle(STAFF_CHANNELS.REACTIVATE, queries.reactivateStaff);
-  handle(STAFF_CHANNELS.IS_ADMIN, queries.isAdmin);
-  handle(STAFF_CHANNELS.DELETE, queries.deleteStaff);
+  handleAdmin(STAFF_CHANNELS.CREATE, (input: Parameters<typeof queries.createStaff>[0]) =>
+    stripPinHash(queries.createStaff(input))
+  );
+  handleAuth(STAFF_CHANNELS.GET, (id: number) => {
+    const staff = queries.getStaffById(id);
+    if (!staff) return null;
+    const { pin_hash: _, ...safe } = staff;
+    return safe;
+  });
+  handleAuth(STAFF_CHANNELS.GET_ALL, (onlyActive?: boolean) => {
+    const list = queries.getAllStaff(onlyActive ?? true);
+    return list.map(({ pin_hash: _, ...safe }) => safe);
+  });
+  handleAdmin(STAFF_CHANNELS.UPDATE, (id: number, input: Parameters<typeof queries.updateStaff>[1]) =>
+    stripPinHash(queries.updateStaff(id, input))
+  );
+  // Login endpoint: verify PIN and create a session on success
+  handlePublic(STAFF_CHANNELS.VERIFY_PIN, (pin: string) => {
+    const result = queries.verifyStaffPin(pin);
+    if (result.success && result.staff) {
+      createSession(result.staff.id, result.staff.role);
+      console.log(`[IPC] Session created for staff ${result.staff.id} (${result.staff.role})`);
+    }
+    return result;
+  });
+  handleAuthWithStaff(STAFF_CHANNELS.CHANGE_OWN_PIN, (staffId: number, currentPin: string, newPin: string) => {
+    queries.changeOwnPin(staffId, currentPin, newPin);
+    return { success: true };
+  });
+  handleAdmin(STAFF_CHANNELS.DEACTIVATE, queries.deactivateStaff);
+  handleAdmin(STAFF_CHANNELS.REACTIVATE, queries.reactivateStaff);
+  handleAuthWithStaff(STAFF_CHANNELS.IS_ADMIN, (staffId: number) => queries.isAdmin(staffId));
+  handleAdmin(STAFF_CHANNELS.DELETE, queries.deleteStaff);
   
   // ==========================================================================
-  // Dispensing Handlers
+  // Dispensing Handlers (PHI - Authentication Required)
   // ==========================================================================
   
-  handle(DISPENSING_CHANNELS.CREATE, queries.createDispense);
-  handle(DISPENSING_CHANNELS.GET, queries.getDispenseById);
-  handle(DISPENSING_CHANNELS.GET_BY_PATIENT, queries.getDispensesByPatient);
-  handle(DISPENSING_CHANNELS.SEARCH, queries.searchDispenses);
-  handle(DISPENSING_CHANNELS.VOID, queries.voidDispense);
-  handle(DISPENSING_CHANNELS.CORRECT, queries.correctDispense);
-  handle(DISPENSING_CHANNELS.GET_TODAY_COUNT, queries.getTodayDispenseCount);
+  handleAuth(DISPENSING_CHANNELS.CREATE, queries.createDispense);
+  handleAuth(DISPENSING_CHANNELS.GET, queries.getDispenseById);
+  handleAuth(DISPENSING_CHANNELS.GET_BY_PATIENT, queries.getDispensesByPatient);
+  handleAuth(DISPENSING_CHANNELS.SEARCH, queries.searchDispenses);
+  handleAuth(DISPENSING_CHANNELS.VOID, queries.voidDispense);
+  handleAuth(DISPENSING_CHANNELS.CORRECT, queries.correctDispense);
+  handleAuth(DISPENSING_CHANNELS.GET_TODAY_COUNT, queries.getTodayDispenseCount);
   
   // ==========================================================================
-  // Inventory Handlers
+  // Inventory Handlers (PHI - Authentication Required)
   // ==========================================================================
 
-  handle(INVENTORY_CHANNELS.RECEIVE, queries.receiveInventory);
-  handle(INVENTORY_CHANNELS.GET, queries.getInventoryById);
-  handle(INVENTORY_CHANNELS.GET_WITH_TRANSACTIONS, queries.getInventoryWithTransactions);
-  handle(INVENTORY_CHANNELS.SEARCH, queries.searchInventory);
-  handle(INVENTORY_CHANNELS.GET_BY_MEDICATION, queries.getInventoryByMedication);
-  handle(INVENTORY_CHANNELS.GET_LOW_STOCK, queries.getLowStockItems);
-  handle(INVENTORY_CHANNELS.GET_EXPIRING, queries.getExpiringItems);
-  handle(INVENTORY_CHANNELS.ADJUST, queries.adjustInventory);
-  handle(INVENTORY_CHANNELS.GET_TRANSACTIONS, queries.getInventoryTransactions);
-  handle(INVENTORY_CHANNELS.QUARANTINE, queries.quarantineInventory);
+  handleAuth(INVENTORY_CHANNELS.RECEIVE, queries.receiveInventory);
+  handleAuth(INVENTORY_CHANNELS.GET, queries.getInventoryById);
+  handleAuth(INVENTORY_CHANNELS.GET_WITH_TRANSACTIONS, queries.getInventoryWithTransactions);
+  handleAuth(INVENTORY_CHANNELS.SEARCH, queries.searchInventory);
+  handleAuth(INVENTORY_CHANNELS.GET_BY_MEDICATION, queries.getInventoryByMedication);
+  handleAuth(INVENTORY_CHANNELS.GET_LOW_STOCK, queries.getLowStockItems);
+  handleAuth(INVENTORY_CHANNELS.GET_EXPIRING, queries.getExpiringItems);
+  handleAuth(INVENTORY_CHANNELS.ADJUST, queries.adjustInventory);
+  handleAuth(INVENTORY_CHANNELS.GET_TRANSACTIONS, queries.getInventoryTransactions);
+  handleAuth(INVENTORY_CHANNELS.QUARANTINE, queries.quarantineInventory);
   // New lot validation and FEFO functions
-  handle(INVENTORY_CHANNELS.VALIDATE_LOT, (lotId: number, quantity: number) =>
+  handleAuth(INVENTORY_CHANNELS.VALIDATE_LOT, (lotId: number, quantity: number) =>
     queries.validateLotForDispensing(lotId, quantity)
   );
-  handle(INVENTORY_CHANNELS.GET_LOTS_BY_MEDICATION, (medicationName: string, options?: any) =>
+  handleAuth(INVENTORY_CHANNELS.GET_LOTS_BY_MEDICATION, (medicationName: string, options?: any) =>
     queries.getLotsByMedicationName(medicationName, options)
   );
-  handle(INVENTORY_CHANNELS.GET_AVAILABLE_LOTS, (medicationName: string) =>
+  handleAuth(INVENTORY_CHANNELS.GET_AVAILABLE_LOTS, (medicationName: string) =>
     queries.getAvailableLotsForDispensing(medicationName)
   );
-  handle(INVENTORY_CHANNELS.GET_LOTS_EXPIRING_WITHIN, (days: number, includeExpired?: boolean) =>
+  handleAuth(INVENTORY_CHANNELS.GET_LOTS_EXPIRING_WITHIN, (days: number, includeExpired?: boolean) =>
     queries.getLotsExpiringWithin(days, includeExpired)
   );
-  handle(INVENTORY_CHANNELS.GET_LOT_BY_NUMBER, (lotNumber: string) =>
+  handleAuth(INVENTORY_CHANNELS.GET_LOT_BY_NUMBER, (lotNumber: string) =>
     queries.getLotByNumber(lotNumber)
   );
-  handle(INVENTORY_CHANNELS.GET_MEDICATION_SUMMARY, (medicationName: string) =>
+  handleAuth(INVENTORY_CHANNELS.GET_MEDICATION_SUMMARY, (medicationName: string) =>
     queries.getMedicationSummary(medicationName)
   );
-  handle('inventory:getAllMedications', queries.getAllMedicationSummaries);
-  handle(INVENTORY_CHANNELS.VALIDATE_LOTS_BATCH, (items: Array<{ lotId: number; quantity: number }>) =>
+  handleAuth('inventory:getAllMedications', queries.getAllMedicationSummaries);
+  handleAuth(INVENTORY_CHANNELS.VALIDATE_LOTS_BATCH, (items: Array<{ lotId: number; quantity: number }>) =>
     queries.validateLotsForDispensing(items)
   );
-  handle(INVENTORY_CHANNELS.GET_LOT_DETAILS, (lotId: number) =>
+  handleAuth(INVENTORY_CHANNELS.GET_LOT_DETAILS, (lotId: number) =>
     queries.getLotDetailsWithHistory(lotId)
   );
   
   // ==========================================================================
-  // Alert Handlers
+  // Alert Handlers (Authentication Required)
   // ==========================================================================
   
-  handle(ALERT_CHANNELS.GET_ACTIVE, queries.getActiveAlerts);
-  handle(ALERT_CHANNELS.GET_ALL, queries.getAllAlerts);
-  handle(ALERT_CHANNELS.ACKNOWLEDGE, queries.acknowledgeAlert);
-  handle(ALERT_CHANNELS.ACKNOWLEDGE_FOR_INVENTORY, queries.acknowledgeAlertsForInventory);
-  handle(ALERT_CHANNELS.GET_COUNTS, queries.getAlertCounts);
-  handle(ALERT_CHANNELS.CREATE, queries.createAlert);
+  handleAuth(ALERT_CHANNELS.GET_ACTIVE, queries.getActiveAlerts);
+  handleAuth(ALERT_CHANNELS.GET_ALL, queries.getAllAlerts);
+  handleAuth(ALERT_CHANNELS.ACKNOWLEDGE, queries.acknowledgeAlert);
+  handleAuth(ALERT_CHANNELS.ACKNOWLEDGE_FOR_INVENTORY, queries.acknowledgeAlertsForInventory);
+  handleAuth(ALERT_CHANNELS.GET_COUNTS, queries.getAlertCounts);
+  handleAuth(ALERT_CHANNELS.CREATE, queries.createAlert);
   
   // ==========================================================================
-  // Audit Handlers
+  // Audit Handlers (PHI - Authentication Required)
   // ==========================================================================
   
-  handle(AUDIT_CHANNELS.SEARCH, queries.searchAuditLog);
-  handle(AUDIT_CHANNELS.GET_TRAIL, queries.getEntityAuditTrail);
-  handle(AUDIT_CHANNELS.VERIFY_INTEGRITY, queries.verifyAuditIntegrity);
-  handle(AUDIT_CHANNELS.GET_RECENT, queries.getRecentActivity);
-  handle(AUDIT_CHANNELS.EXPORT, queries.exportAuditLog);
+  handleAuth(AUDIT_CHANNELS.SEARCH, queries.searchAuditLog);
+  handleAuth(AUDIT_CHANNELS.GET_TRAIL, queries.getEntityAuditTrail);
+  handleAuth(AUDIT_CHANNELS.VERIFY_INTEGRITY, queries.verifyAuditIntegrity);
+  handleAuth(AUDIT_CHANNELS.GET_RECENT, queries.getRecentActivity);
+  handleAuth(AUDIT_CHANNELS.EXPORT, queries.exportAuditLog);
   
   // ==========================================================================
-  // Draft Handlers
+  // Draft Handlers (Authentication Required)
   // ==========================================================================
   
-  handle(DRAFT_CHANNELS.SAVE, queries.saveDraft);
-  handle(DRAFT_CHANNELS.GET, (id: number) => queries.getDraftById(id));
-  handle(DRAFT_CHANNELS.GET_BY_STAFF, queries.getDraftsByStaff);
-  handle(DRAFT_CHANNELS.GET_ALL, queries.getAllDrafts);
-  handle(DRAFT_CHANNELS.DELETE, queries.deleteDraft);
-  handle(DRAFT_CHANNELS.DELETE_BY_TYPE, (type: string, staffId: number) => 
+  handleAuthWithStaff(DRAFT_CHANNELS.SAVE, (staffId: number, input: Omit<CreateDraftInput, 'staff_id'>) =>
+    queries.saveDraft({ ...input, staff_id: staffId })
+  );
+  handleAuth(DRAFT_CHANNELS.GET, (id: number) => queries.getDraftById(id));
+  handleAuthWithStaff(DRAFT_CHANNELS.GET_BY_STAFF, (staffId) => queries.getDraftsByStaff(staffId));
+  handleAuth(DRAFT_CHANNELS.GET_ALL, queries.getAllDrafts);
+  handleAuth(DRAFT_CHANNELS.DELETE, queries.deleteDraft);
+  handleAuthWithStaff(DRAFT_CHANNELS.DELETE_BY_TYPE, (staffId, type: string) => 
     queries.deleteDraftByTypeAndStaff(type as any, staffId)
   );
-  handle(DRAFT_CHANNELS.GET_COUNT, queries.getDraftCount);
+  handleAuth(DRAFT_CHANNELS.GET_COUNT, queries.getDraftCount);
   
   // ==========================================================================
-  // Dashboard Handlers
+  // Dashboard Handlers (Authentication Required)
   // ==========================================================================
   
-  handle(DASHBOARD_CHANNELS.GET_STATS, () => {
+  handleAuth(DASHBOARD_CHANNELS.GET_STATS, () => {
     const db = getDatabase();
     const today = new Date().toISOString().split('T')[0];
     
@@ -241,40 +334,40 @@ export function registerIpcHandlers(): void {
   });
   
   // ==========================================================================
-  // Reports Handlers
+  // Reports Handlers (PHI - Authentication Required)
   // ==========================================================================
   
-  handle(REPORTS_CHANNELS.DAILY_SUMMARY, (date: string) => {
+  handleAuth(REPORTS_CHANNELS.DAILY_SUMMARY, (date: string) => {
     return reportGenerator.generateDailySummary(date);
   });
   
-  handle(REPORTS_CHANNELS.INVENTORY_USAGE, () => {
+  handleAuth(REPORTS_CHANNELS.INVENTORY_USAGE, () => {
     return reportGenerator.generateInventoryReport();
   });
   
-  handle(REPORTS_CHANNELS.EXPIRATION, (days: number) => {
+  handleAuth(REPORTS_CHANNELS.EXPIRATION, (days: number) => {
     return reportGenerator.generateExpirationReport(days);
   });
   
-  handle(REPORTS_CHANNELS.STAFF_ACTIVITY, ({ staffId, dateRange }: { staffId: string | null; dateRange: { from: string; to: string } }) => {
+  handleAuth(REPORTS_CHANNELS.STAFF_ACTIVITY, ({ staffId, dateRange }: { staffId: string | null; dateRange: { from: string; to: string } }) => {
     return reportGenerator.generateStaffActivity(staffId, dateRange);
   });
   
-  handle(REPORTS_CHANNELS.RECONCILIATION, (date: string) => {
+  handleAuth(REPORTS_CHANNELS.RECONCILIATION, (date: string) => {
     return reportGenerator.generateReconciliation(date);
   });
   
   // ==========================================================================
-  // Settings Handlers
+  // Settings Handlers (Authentication Required, some Admin-only)
   // ==========================================================================
   
-  handle(SETTINGS_CHANNELS.GET, (key: string) => {
+  handleAuth(SETTINGS_CHANNELS.GET, (key: string) => {
     const db = getDatabase();
     const result = db.prepare('SELECT value FROM app_settings WHERE key = ?').get(key) as { value: string } | undefined;
     return result?.value || null;
   });
   
-  handle(SETTINGS_CHANNELS.SET, ({ key, value }: { key: string; value: string }) => {
+  handleAdmin(SETTINGS_CHANNELS.SET, ({ key, value }: { key: string; value: string }) => {
     const db = getDatabase();
     const now = new Date().toISOString();
     db.prepare(`
@@ -285,7 +378,7 @@ export function registerIpcHandlers(): void {
     return { success: true };
   });
   
-  handle(SETTINGS_CHANNELS.GET_ALL, () => {
+  handleAuth(SETTINGS_CHANNELS.GET_ALL, () => {
     const db = getDatabase();
     const rows = db.prepare('SELECT key, value FROM app_settings').all() as Array<{ key: string; value: string }>;
     const settings: Record<string, string> = {};
@@ -296,40 +389,40 @@ export function registerIpcHandlers(): void {
   });
 
   // ==========================================================================
-  // Print Handlers
+  // Print Handlers (Authentication Required - registered internally)
   // ==========================================================================
 
   registerPrintIpcHandlers();
 
   // ==========================================================================
-  // Instruction Service Handlers
+  // Instruction Service Handlers (Authentication Required)
   // ==========================================================================
 
-  handle(INSTRUCTION_CHANNELS.GET_CONTEXT_FROM_REASONS, (reasons: Array<{ reasonName: string; isCustom: boolean }>) => {
+  handleAuth(INSTRUCTION_CHANNELS.GET_CONTEXT_FROM_REASONS, (reasons: Array<{ reasonName: string; isCustom: boolean }>) => {
     return instructionService.getContextFromReasons(reasons);
   });
 
-  handle(INSTRUCTION_CHANNELS.GET_TEMPLATE, ({ medicationId, context }: { medicationId: string; context: string }) => {
+  handleAuth(INSTRUCTION_CHANNELS.GET_TEMPLATE, ({ medicationId, context }: { medicationId: string; context: string }) => {
     return instructionService.getInstructionTemplate(medicationId, context as any);
   });
 
-  handle(INSTRUCTION_CHANNELS.CALCULATE_DAY_SUPPLY, ({ quantity, template }: { quantity: number; template: any }) => {
+  handleAuth(INSTRUCTION_CHANNELS.CALCULATE_DAY_SUPPLY, ({ quantity, template }: { quantity: number; template: any }) => {
     return instructionService.calculateDaySupply(quantity, template);
   });
 
-  handle(INSTRUCTION_CHANNELS.GET_WARNINGS, ({ medicationId, context }: { medicationId: string; context: string }) => {
+  handleAuth(INSTRUCTION_CHANNELS.GET_WARNINGS, ({ medicationId, context }: { medicationId: string; context: string }) => {
     return instructionService.getWarnings(medicationId, context as any);
   });
 
-  handle(INSTRUCTION_CHANNELS.GET_SHORT_DOSING, ({ medicationId, context, quantity }: { medicationId: string; context: string; quantity?: number }) => {
+  handleAuth(INSTRUCTION_CHANNELS.GET_SHORT_DOSING, ({ medicationId, context, quantity }: { medicationId: string; context: string; quantity?: number }) => {
     return instructionService.getShortDosing(medicationId, context as any, quantity);
   });
 
-  handle(INSTRUCTION_CHANNELS.GET_FULL_INSTRUCTIONS, ({ medicationId, context }: { medicationId: string; context: string }) => {
+  handleAuth(INSTRUCTION_CHANNELS.GET_FULL_INSTRUCTIONS, ({ medicationId, context }: { medicationId: string; context: string }) => {
     return instructionService.getFullInstructions(medicationId, context as any);
   });
 
-  handle(INSTRUCTION_CHANNELS.POPULATE_LINE_ITEM, async ({ medicationName, lotId, reasons, quantity }: {
+  handleAuth(INSTRUCTION_CHANNELS.POPULATE_LINE_ITEM, async ({ medicationName, lotId, reasons, quantity }: {
     medicationName: string;
     lotId: string | number;
     reasons: Array<{ reasonName: string; isCustom: boolean }>;
@@ -338,140 +431,182 @@ export function registerIpcHandlers(): void {
     return instructionService.populateLineItemInstructions(medicationName, lotId, reasons, quantity);
   });
 
-  handle(INSTRUCTION_CHANNELS.GET_AVAILABLE_CONTEXTS, (medicationId: string) => {
+  handleAuth(INSTRUCTION_CHANNELS.GET_AVAILABLE_CONTEXTS, (medicationId: string) => {
     return instructionService.getAvailableContextsForMedication(medicationId);
   });
 
-  handle(INSTRUCTION_CHANNELS.GET_ALL_TEMPLATES, (medicationId: string) => {
+  handleAuth(INSTRUCTION_CHANNELS.GET_ALL_TEMPLATES, (medicationId: string) => {
     return instructionService.getAllTemplatesForMedication(medicationId);
   });
 
+  // Medication catalog queries (Authentication Required)
+  handleAuth(INSTRUCTION_CHANNELS.GET_MEDICATIONS_BY_CONTEXT, (context: string) => {
+    return queries.getMedicationsByContext(context as any);
+  });
+
+  handleAuth(INSTRUCTION_CHANNELS.GET_TEMPLATE_FOR_MEDICATION, ({ medicationName, context }: { medicationName: string; context: string }) => {
+    return queries.getInstructionTemplateForMedication(medicationName, context as any);
+  });
+
+  handleAuth(INSTRUCTION_CHANNELS.GET_TEMPLATES_FOR_MEDICATION, (medicationName: string) => {
+    return queries.getTemplatesForMedication(medicationName);
+  });
+
+  handleAuth(INSTRUCTION_CHANNELS.GET_CONTEXTS_FOR_MEDICATION, (medicationName: string) => {
+    return queries.getContextsForMedication(medicationName);
+  });
+
+  handleAuth(INSTRUCTION_CHANNELS.GET_ALL_MEDICATIONS_CATALOG, () => {
+    return queries.getAllMedicationsFromCatalog();
+  });
+
   // ==========================================================================
-  // Backup Handlers
+  // Backup Handlers (Admin Only - Highly Sensitive)
   // ==========================================================================
 
   // Create backup
-  ipcMain.handle('backup:create', async (_event, options?: { compress?: boolean; verify?: boolean }) => {
-    try {
-      const { createBackup } = await import('./backup/backup');
-      const backupPath = await createBackup('./backups', {
-        compress: options?.compress ?? true,
-        verify: options?.verify ?? true,
-      });
-      return { success: true, data: { path: backupPath, filename: backupPath.split('/').pop() } };
-    } catch (error) {
-      return { success: false, error: error instanceof Error ? error.message : 'Backup failed' };
-    }
+  handleAdmin('backup:create', async (options?: { compress?: boolean; verify?: boolean }) => {
+    const backupDir = getBackupDirectory();
+    const backupPath = await createBackup(backupDir, {
+      compress: options?.compress ?? true,
+      verify: options?.verify ?? true,
+    });
+    const info = getBackupInfo(backupPath);
+
+    return {
+      path: backupPath,
+      filename: path.basename(backupPath),
+      size: info.size,
+      checksum: info.checksum,
+      verified: info.verified,
+      createdAt: info.createdAt,
+    };
   });
 
   // List available backups
-  ipcMain.handle('backup:list', async () => {
-    try {
-      const fs = await import('fs');
-      const path = await import('path');
-      const backupDir = './backups';
-      
-      if (!fs.existsSync(backupDir)) {
-        return { success: true, data: [] };
-      }
-
-      const files = fs.readdirSync(backupDir)
-        .filter(f => f.endsWith('.db') || f.endsWith('.db.gz'))
-        .map(f => {
-          const stats = fs.statSync(path.join(backupDir, f));
-          const checksumPath = path.join(backupDir, `${f}.sha256`);
-          const verifiedPath = path.join(backupDir, `${f}.verified`);
-          
-          return {
-            id: f,
-            filename: f,
-            path: path.join(backupDir, f),
-            size: stats.size,
-            createdAt: stats.mtime.toISOString(),
-            checksum: fs.existsSync(checksumPath) ? fs.readFileSync(checksumPath, 'utf-8').trim() : null,
-            verified: fs.existsSync(verifiedPath),
-            type: f.includes('auto') ? 'automatic' : 'manual',
-          };
-        })
-        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-
-      return { success: true, data: files };
-    } catch (error) {
-      return { success: false, error: error instanceof Error ? error.message : 'Failed to list backups' };
-    }
+  handleAuth('backup:list', () => {
+    return listBackups().map((backup) => {
+      const checksumPath = `${backup.path}.sha256`;
+      return {
+        id: backup.filename,
+        filename: backup.filename,
+        path: backup.path,
+        size: backup.size,
+        createdAt: backup.createdAt,
+        checksum: fs.existsSync(checksumPath) ? fs.readFileSync(checksumPath, 'utf-8').trim() : null,
+        verified: backup.verified,
+        type: backup.filename.includes('auto') ? 'automatic' : 'manual',
+      };
+    });
   });
 
   // Preview backup contents
-  ipcMain.handle('backup:preview', async (_event, backupPath: string) => {
-    try {
-      // In a real implementation, this would read the backup and show table counts
-      // For now, return mock preview data
-      return {
-        success: true,
-        data: {
-          tables: ['patients', 'dispensing_records', 'inventory', 'staff_members', 'alerts'],
-          recordCounts: {
-            patients: 150,
-            dispensing_records: 1250,
-            inventory: 75,
-            staff_members: 8,
-            alerts: 23,
-          },
-          appVersion: '1.0.0',
-          backupDate: new Date().toISOString(),
-        },
-      };
-    } catch (error) {
-      return { success: false, error: error instanceof Error ? error.message : 'Preview failed' };
+  handleAdmin('backup:preview', async (backupPath: string) => {
+    const validation = await validateBackup(backupPath);
+    if (!validation.valid || !validation.details) {
+      throw new Error(validation.message);
     }
+
+    const stats = fs.statSync(backupPath);
+    return {
+      tables: validation.details.tables,
+      recordCounts: validation.details.recordCounts,
+      appVersion: app.getVersion(),
+      backupDate: stats.mtime.toISOString(),
+    };
   });
 
   // Restore from backup
-  ipcMain.handle('backup:restore', async (_event, backupPath: string) => {
-    try {
-      const { restoreBackup } = await import('./backup/restore');
-      await restoreBackup(backupPath);
-      return { success: true };
-    } catch (error) {
-      return { success: false, error: error instanceof Error ? error.message : 'Restore failed' };
+  handleAdmin('backup:restore', async (backupPath: string) => {
+    const restoreResult = await restoreFromBackup(backupPath);
+    if (!restoreResult.success) {
+      throw new Error(restoreResult.message);
     }
+    return restoreResult;
   });
 
   // Rollback restore
-  ipcMain.handle('backup:rollback', async () => {
-    try {
-      // In a real implementation, this would restore from a pre-restore backup
-      return { success: true };
-    } catch (error) {
-      return { success: false, error: error instanceof Error ? error.message : 'Rollback failed' };
+  handleAdmin('backup:rollback', async () => {
+    const currentDbPath = getDbPath();
+    const dbDir = path.dirname(currentDbPath);
+    const dbName = path.basename(currentDbPath);
+    const rollbackCandidates = fs.readdirSync(dbDir)
+      .filter((file) => file.startsWith(`${dbName}.pre-restore-`))
+      .sort();
+
+    if (rollbackCandidates.length === 0) {
+      throw new Error('No pre-restore backup is available for rollback');
     }
+
+    const latestRollback = rollbackCandidates[rollbackCandidates.length - 1];
+    const rollbackPath = path.join(dbDir, latestRollback);
+    fs.copyFileSync(rollbackPath, currentDbPath);
+
+    return {
+      success: true,
+      rollbackSource: rollbackPath,
+    };
   });
 
   // Import backup file
-  ipcMain.handle('backup:import', async () => {
-    try {
-      // In a real implementation, this would show a file dialog
-      return { success: true };
-    } catch (error) {
-      return { success: false, error: error instanceof Error ? error.message : 'Import failed' };
+  handleAdmin('backup:import', async () => {
+    const result = await dialog.showOpenDialog({
+      title: 'Import Backup',
+      filters: [
+        { name: 'Database Backups', extensions: ['db', 'gz'] },
+        { name: 'All Files', extensions: ['*'] },
+      ],
+      properties: ['openFile'],
+    });
+
+    if (result.canceled || result.filePaths.length === 0) {
+      return { imported: false };
     }
+
+    const sourcePath = result.filePaths[0];
+    const backupDir = getBackupDirectory();
+    const destinationPath = path.join(backupDir, path.basename(sourcePath));
+    fs.copyFileSync(sourcePath, destinationPath);
+
+    const checksumSource = `${sourcePath}.sha256`;
+    const checksumDest = `${destinationPath}.sha256`;
+    if (fs.existsSync(checksumSource)) {
+      fs.copyFileSync(checksumSource, checksumDest);
+    }
+
+    const verifiedSource = `${sourcePath}.verified`;
+    const verifiedDest = `${destinationPath}.verified`;
+    if (fs.existsSync(verifiedSource)) {
+      fs.copyFileSync(verifiedSource, verifiedDest);
+    }
+
+    return {
+      imported: true,
+      path: destinationPath,
+      filename: path.basename(destinationPath),
+    };
   });
 
   // Select backup location
-  ipcMain.handle('backup:selectLocation', async () => {
-    try {
-      // In a real implementation, this would show a directory dialog
-      return { success: true, data: './backups' };
-    } catch (error) {
-      return { success: false, error: error instanceof Error ? error.message : 'Selection failed' };
+  handleAdmin('backup:selectLocation', async () => {
+    const result = await dialog.showOpenDialog({
+      title: 'Select Backup Folder',
+      defaultPath: getBackupDirectory(),
+      properties: ['openDirectory', 'createDirectory'],
+    });
+
+    if (result.canceled || result.filePaths.length === 0) {
+      return null;
     }
+
+    return result.filePaths[0];
   });
 
   // ==========================================================================
-  // Settings Export/Import Handlers
+  // Settings Export/Import Handlers (Admin Only)
   // ==========================================================================
 
-  ipcMain.handle('settings:export', async (_event, type: string) => {
+  ipcMain.handle('settings:export', requireAdmin(async (_event, type: string) => {
     try {
       const db = getDatabase();
       let data: any;
@@ -502,16 +637,16 @@ export function registerIpcHandlers(): void {
     } catch (error) {
       return { success: false, error: error instanceof Error ? error.message : 'Export failed' };
     }
-  });
+  }));
 
-  ipcMain.handle('settings:import', async (_event, type: string) => {
+  ipcMain.handle('settings:import', requireAdmin(async (_event, _type: string) => {
     try {
       // In a real implementation, this would show a file dialog and import
       return { success: true };
     } catch (error) {
       return { success: false, error: error instanceof Error ? error.message : 'Import failed' };
     }
-  });
+  }));
 
   console.log('[IPC] All handlers registered');
 }
@@ -534,6 +669,15 @@ export function unregisterIpcHandlers(): void {
     ...Object.values(REPORTS_CHANNELS),
     ...Object.values(PRINT_CHANNELS),
     ...Object.values(INSTRUCTION_CHANNELS),
+    'backup:create',
+    'backup:list',
+    'backup:preview',
+    'backup:restore',
+    'backup:rollback',
+    'backup:import',
+    'backup:selectLocation',
+    'settings:export',
+    'settings:import',
   ];
 
   for (const channel of allChannels) {

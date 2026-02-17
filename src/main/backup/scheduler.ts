@@ -11,7 +11,6 @@ import log from 'electron-log';
 import { getSetting, setSetting } from '../settings/settings';
 import { DEFAULT_BACKUP_INTERVAL_HOURS, DEFAULT_BACKUP_RETENTION_DAYS } from '../../renderer/utils/constants';
 import { createBackup } from './backup';
-import { getDatabase } from '../database/db';
 
 let backupInterval: NodeJS.Timeout | null = null;
 let isSchedulerRunning = false;
@@ -53,10 +52,8 @@ export const getBackupSettings = (): {
  * Run a manual backup
  */
 export const runManualBackup = async (): Promise<string> => {
-  const db = getDatabase();
-  
   const backupDir = getBackupDirectory();
-  const backupPath = await createBackup(db, backupDir);
+  const backupPath = await createBackup(backupDir);
   
   // Update last backup time
   setSetting('lastBackup', new Date().toISOString());

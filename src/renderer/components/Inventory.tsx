@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, AlertCircle, Package, TrendingDown, Calendar, CheckCircle, Search, Download } from 'lucide-react';
+import { Plus, AlertCircle, Package, TrendingDown, Calendar, CheckCircle, Download } from 'lucide-react';
 import { format } from 'date-fns';
 
 interface User {
@@ -68,6 +68,9 @@ export const Inventory: React.FC<InventoryProps> = ({ user }) => {
   const loadData = async () => {
     setIsLoading(true);
     try {
+      if (!window.electron?.inventory || !window.electron?.alerts) {
+        throw new Error('Inventory or Alerts API is not available');
+      }
       const [dashboard, inventory, alertsData] = await Promise.all([
         window.electron.inventory.getDashboard(),
         window.electron.inventory.getAll(),
@@ -85,6 +88,9 @@ export const Inventory: React.FC<InventoryProps> = ({ user }) => {
 
   const loadMedications = async () => {
     try {
+      if (!window.electron?.medication?.getAll) {
+        throw new Error('Medication API is not available');
+      }
       const meds = await window.electron.medication.getAll();
       setMedications((meds as any[]).map((m) => ({ id: m.id, name: m.name })));
     } catch (err) {
@@ -99,6 +105,9 @@ export const Inventory: React.FC<InventoryProps> = ({ user }) => {
     }
 
     try {
+      if (!window.electron?.inventory?.receive) {
+        throw new Error('Inventory API is not available');
+      }
       await window.electron.inventory.receive({
         ...receiveForm,
         date_received: format(new Date(), 'yyyy-MM-dd'),
@@ -126,6 +135,9 @@ export const Inventory: React.FC<InventoryProps> = ({ user }) => {
 
   const resolveAlert = async (alertId: number) => {
     try {
+      if (!window.electron?.alerts?.resolve) {
+        throw new Error('Alerts API is not available');
+      }
       await window.electron.alerts.resolve(alertId, user.id);
       loadData();
     } catch (err) {

@@ -5,6 +5,13 @@
  * handling keyboard navigation and actions.
  */
 
+type ShortcutModifier = 'ctrl' | 'alt' | 'shift' | 'meta';
+type ShortcutDefinition = {
+  key: string;
+  modifiers: readonly ShortcutModifier[];
+  description: string;
+};
+
 /**
  * Keyboard shortcut definitions
  */
@@ -39,7 +46,7 @@ export const KEYBOARD_SHORTCUTS = {
   // Help
   SHOW_HELP: { key: '?', modifiers: ['shift'], description: 'Show Keyboard Shortcuts' },
   SHOW_SHORTCUTS: { key: '/', modifiers: ['ctrl'], description: 'Show Keyboard Shortcuts' },
-} as const;
+} as const satisfies Record<string, ShortcutDefinition>;
 
 /**
  * Type for keyboard shortcut keys
@@ -51,7 +58,7 @@ export type ShortcutKey = keyof typeof KEYBOARD_SHORTCUTS;
  */
 export const matchesShortcut = (
   event: KeyboardEvent,
-  shortcut: typeof KEYBOARD_SHORTCUTS[ShortcutKey]
+  shortcut: ShortcutDefinition
 ): boolean => {
   if (event.key !== shortcut.key && event.key.toLowerCase() !== shortcut.key.toLowerCase()) {
     return false;
@@ -81,7 +88,7 @@ export const matchesShortcut = (
 /**
  * Format a shortcut for display
  */
-export const formatShortcut = (shortcut: typeof KEYBOARD_SHORTCUTS[ShortcutKey]): string => {
+export const formatShortcut = (shortcut: ShortcutDefinition): string => {
   const parts: string[] = [];
   
   // Use Command symbol on Mac, Ctrl on others
@@ -102,14 +109,16 @@ export const formatShortcut = (shortcut: typeof KEYBOARD_SHORTCUTS[ShortcutKey])
   }
   
   // Format key
-  let key = shortcut.key;
-  if (key === 'Tab') key = '⇥';
-  if (key === 'Enter') key = '↵';
-  if (key === 'Escape') key = 'Esc';
-  if (key === '?') key = '?';
-  if (key === '/') key = '/';
-  
-  parts.push(key.toUpperCase());
+  const displayKey =
+    shortcut.key === 'Tab'
+      ? '⇥'
+      : shortcut.key === 'Enter'
+      ? '↵'
+      : shortcut.key === 'Escape'
+      ? 'Esc'
+      : shortcut.key;
+
+  parts.push(displayKey.toUpperCase());
   
   return parts.join(process.platform === 'darwin' ? '' : '+');
 };

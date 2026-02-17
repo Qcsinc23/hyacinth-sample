@@ -24,6 +24,9 @@ export const ReconciliationReport: React.FC = () => {
   const fetchReport = async () => {
     setLoading(true);
     try {
+      if (!window.electron?.reports?.reconciliation) {
+        throw new Error('Reports API is not available');
+      }
       const data = await window.electron.reports.reconciliation(date);
       setReport(data);
     } catch (error) {

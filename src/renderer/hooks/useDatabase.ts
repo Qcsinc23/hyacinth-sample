@@ -1,38 +1,5 @@
 import { useState, useCallback } from 'react';
-import type { DispenseRecord, Patient, MedicationStock, MedicationLot } from '../types';
-
-// Mock database for demo purposes
-const MOCK_PATIENTS: Patient[] = [
-  { id: 'p1', chartNumber: 'CH001234', firstName: 'John', lastName: 'Smith', dateOfBirth: new Date('1970-05-15'), allergies: ['Penicillin'] },
-  { id: 'p2', chartNumber: 'CH001235', firstName: 'Jane', lastName: 'Doe', dateOfBirth: new Date('1985-08-22'), allergies: [] },
-  { id: 'p3', chartNumber: 'CH001236', firstName: 'Bob', lastName: 'Johnson', dateOfBirth: new Date('1960-03-10'), allergies: ['Sulfa', 'Latex'] },
-  { id: 'p4', chartNumber: 'CH001237', firstName: 'Alice', lastName: 'Williams', dateOfBirth: new Date('1992-11-30'), allergies: [] },
-  { id: 'p5', chartNumber: 'CH001238', firstName: 'Charlie', lastName: 'Brown', dateOfBirth: new Date('1978-07-04'), allergies: ['Codeine'] },
-];
-
-const MOCK_RECORDS: DispenseRecord[] = [
-  {
-    id: 'r1',
-    patientId: 'p1',
-    patientName: 'John Smith',
-    patientChartNumber: 'CH001234',
-    medications: [{
-      id: 'm1',
-      medicationId: 'med1',
-      medicationName: 'Amoxicillin 500mg',
-      lotId: 'lot1',
-      lotNumber: 'ABC123',
-      amount: 30,
-      unit: 'tablets',
-      expirationDate: new Date('2025-12-01'),
-    }],
-    reasons: ['Scheduled Medication'],
-    dispensedBy: '1',
-    dispensedByName: 'Sarah Johnson',
-    dispensedAt: new Date(),
-    status: 'active',
-  },
-];
+import type { DispenseRecord, Patient } from '../types';
 
 export function useDatabase() {
   const [isLoading, setIsLoading] = useState(false);
@@ -43,17 +10,14 @@ export function useDatabase() {
     setError(null);
     
     try {
-      // Simulate API delay
-      await new Promise(resolve => setTimeout(resolve, 300));
-      
-      const lowerQuery = query.toLowerCase();
-      return MOCK_PATIENTS.filter(p => 
-        p.chartNumber.toLowerCase().includes(lowerQuery) ||
-        p.firstName.toLowerCase().includes(lowerQuery) ||
-        p.lastName.toLowerCase().includes(lowerQuery)
-      );
+      if (!window.electron?.patient?.search) {
+        throw new Error('Patient API is not available');
+      }
+      const results = await window.electron.patient.search(query);
+      return results as Patient[];
     } catch (err) {
-      setError('Failed to search patients');
+      const errorMessage = err instanceof Error ? err.message : 'Failed to search patients';
+      setError(errorMessage);
       return [];
     } finally {
       setIsLoading(false);
@@ -65,10 +29,14 @@ export function useDatabase() {
     setError(null);
     
     try {
-      await new Promise(resolve => setTimeout(resolve, 200));
-      return MOCK_PATIENTS.find(p => p.chartNumber === chartNumber) || null;
+      if (!window.electron?.patient?.getByChart) {
+        throw new Error('Patient API is not available');
+      }
+      const patient = await window.electron.patient.getByChart(chartNumber);
+      return patient as Patient | null;
     } catch (err) {
-      setError('Failed to fetch patient');
+      const errorMessage = err instanceof Error ? err.message : 'Failed to fetch patient';
+      setError(errorMessage);
       return null;
     } finally {
       setIsLoading(false);
@@ -78,17 +46,56 @@ export function useDatabase() {
   const saveDispenseRecord = useCallback(async (record: Omit<DispenseRecord, 'id'>): Promise<DispenseRecord> => {
     setIsLoading(true);
     setError(null);
-    
+
     try {
-      await new Promise(resolve => setTimeout(resolve, 500));
-      const newRecord: DispenseRecord = {
-        ...record,
-        id: Math.random().toString(36).substr(2, 9),
+      const now = record.dispensedAt || new Date();
+      const dateObj = now instanceof Date ? now : new Date(now);
+      const dispensingDate = dateObj.toISOString().slice(0, 10); // YYYY-MM-DD
+      const dispensingTime = dateObj.toTimeString().slice(0, 8);   // HH:MM:SS
+
+      const reasons = record.reasons && record.reasons.length > 0 ? record.reasons : ['Other'];
+      const isCustomReasons = reasons.map(() => false);
+
+      // Backend CreateDispenseInput: patient_id, dispensing_date, dispensing_time, staff_id, label_quantity, items, reasons, is_custom_reasons, additional_notes
+      const dispensingData = {
+        patient_id: parseInt(record.patientId, 10),
+        dispensing_date: dispensingDate,
+        dispensing_time: dispensingTime,
+        staff_id: parseInt(record.dispensedBy, 10),
+        label_quantity: 1,
+        additional_notes: record.notes || undefined,
+        items: record.medications.map((med) => {
+          const invId = parseInt(med.lotId, 10);
+          return {
+            medication_name: med.medicationName,
+            is_custom_medication: false,
+            amount_value: med.amount,
+            amount_unit: med.unit,
+            lot_number: med.lotNumber || undefined,
+            expiration_date: med.expirationDate
+              ? (med.expirationDate instanceof Date
+                  ? med.expirationDate.toISOString().slice(0, 10)
+                  : String(med.expirationDate).slice(0, 10))
+              : undefined,
+            inventory_id: Number.isNaN(invId) ? undefined : invId,
+            dosing_instructions: undefined,
+          };
+        }),
+        reasons,
+        is_custom_reasons: isCustomReasons,
       };
-      MOCK_RECORDS.push(newRecord);
-      return newRecord;
+
+      if (!window.electron?.dispensing?.create) {
+        throw new Error('Dispensing API is not available');
+      }
+      const result = await window.electron.dispensing.create(dispensingData);
+      return {
+        ...record,
+        id: result.id?.toString() ?? result.record_id?.toString() ?? String(Date.now()),
+      } as DispenseRecord;
     } catch (err) {
-      setError('Failed to save record');
+      const errorMessage = err instanceof Error ? err.message : 'Failed to save record';
+      setError(errorMessage);
       throw err;
     } finally {
       setIsLoading(false);
@@ -105,19 +112,87 @@ export function useDatabase() {
     setError(null);
     
     try {
-      await new Promise(resolve => setTimeout(resolve, 300));
-      let records = [...MOCK_RECORDS];
+      const searchFilters: any = {};
       
       if (filters?.patientId) {
-        records = records.filter(r => r.patientId === filters.patientId);
+        searchFilters.patientId = parseInt(filters.patientId);
       }
       if (filters?.status) {
-        records = records.filter(r => r.status === filters.status);
+        searchFilters.status = filters.status;
       }
+      if (filters?.startDate) {
+        searchFilters.dateFrom = filters.startDate.toISOString().split('T')[0];
+      }
+      if (filters?.endDate) {
+        searchFilters.dateTo = filters.endDate.toISOString().split('T')[0];
+      }
+
+      if (!window.electron?.dispensing?.getAll) {
+        throw new Error('Dispensing API is not available');
+      }
+      const results = await window.electron.dispensing.getAll(searchFilters);
+      const rawList = Array.isArray(results) ? results : results?.data ?? [];
+
+      const toRecordStatus = (s: string): 'active' | 'corrected' | 'voided' => {
+        if (s === 'completed') return 'active';
+        return ['active', 'corrected', 'voided'].includes(s) ? (s as 'active' | 'corrected' | 'voided') : 'active';
+      };
+
+      const buildDispensedAt = (r: any): Date => {
+        if (r.dispensed_at) return new Date(r.dispensed_at);
+        if (r.created_at) return new Date(r.created_at);
+        if (r.dispensing_date) {
+          const time = r.dispensing_time || '00:00:00';
+          return new Date(`${r.dispensing_date}T${time}`);
+        }
+        return new Date();
+      };
+
+      // Transform backend results to DispenseRecord format (backend shape: patient, staff, items, reasons, dispensing_date/time)
+      const records = rawList.map((r: any) => {
+        const patientName = r.patient
+          ? [r.patient.first_name, r.patient.last_name].filter(Boolean).join(' ').trim()
+          : [r.patient_first_name, r.patient_last_name].filter(Boolean).join(' ').trim() || '';
+        const patientChartNumber = r.patient?.chart_number ?? r.chart_number ?? '';
+        const dispensedByName = r.staff
+          ? [r.staff.first_name, r.staff.last_name].filter(Boolean).join(' ').trim()
+          : [r.staff_first_name, r.staff_last_name].filter(Boolean).join(' ').trim() || '';
+        const items = r.items ?? r.line_items ?? r.medications ?? [];
+        const reasons: string[] = Array.isArray(r.reasons)
+          ? r.reasons.map((x: any) => (typeof x === 'string' ? x : x?.reason_name ?? ''))
+          : r.reason ? [r.reason] : [];
+
+        return {
+          id: r.id?.toString() || r.record_id?.toString(),
+          patientId: r.patient_id?.toString(),
+          patientName,
+          patientChartNumber,
+          medications: items.map((item: any) => ({
+            id: item.id?.toString() || Math.random().toString(36).substr(2, 9),
+            medicationId: item.medication_id?.toString(),
+            medicationName: item.medication_name,
+            lotId: item.inventory_id?.toString(),
+            lotNumber: item.lot_number,
+            amount: item.amount_value ?? item.quantity_dispensed ?? item.amount ?? 0,
+            unit: item.amount_unit ?? item.unit ?? 'tablets',
+            expirationDate: item.expiration_date ? new Date(item.expiration_date) : null,
+          })),
+          reasons,
+          dispensedBy: (r.staff_id ?? r.dispensed_by)?.toString(),
+          dispensedByName,
+          dispensedAt: buildDispensedAt(r),
+          status: toRecordStatus(r.status || 'active'),
+          notes: r.notes ?? r.additional_notes,
+          recordNumber: r.record_number,
+        };
+      });
       
-      return records.sort((a, b) => b.dispensedAt.getTime() - a.dispensedAt.getTime());
+      return records.sort((a: DispenseRecord, b: DispenseRecord) => 
+        b.dispensedAt.getTime() - a.dispensedAt.getTime()
+      );
     } catch (err) {
-      setError('Failed to fetch records');
+      const errorMessage = err instanceof Error ? err.message : 'Failed to fetch records';
+      setError(errorMessage);
       return [];
     } finally {
       setIsLoading(false);
@@ -129,13 +204,25 @@ export function useDatabase() {
     setError(null);
     
     try {
-      await new Promise(resolve => setTimeout(resolve, 300));
-      const index = MOCK_RECORDS.findIndex(r => r.id === id);
-      if (index !== -1) {
-        MOCK_RECORDS[index] = { ...MOCK_RECORDS[index], ...updates };
+      // For corrections, use the void + recreate pattern or correct API
+      if (updates.status === 'voided') {
+        if (!window.electron?.dispensing?.void) {
+          throw new Error('Dispensing API is not available');
+        }
+        await window.electron.dispensing.void({
+          record_id: parseInt(id),
+          voided_by: parseInt(updates.void?.voidedBy || '0'),
+          reason: updates.void?.reason || 'Record voided',
+        });
+      } else {
+        // For other updates, we may need to use a different approach
+        // Since there's no direct update, we might need to void and recreate
+        // or use a correction endpoint if available
+        throw new Error('Direct record updates not supported. Use void and recreate pattern.');
       }
     } catch (err) {
-      setError('Failed to update record');
+      const errorMessage = err instanceof Error ? err.message : 'Failed to update record';
+      setError(errorMessage);
       throw err;
     } finally {
       setIsLoading(false);
@@ -155,46 +242,99 @@ export function useDatabase() {
     setError(null);
     
     try {
-      await new Promise(resolve => setTimeout(resolve, 300));
-      
-      const page = options?.page || 1;
-      const pageSize = options?.pageSize || 20;
-      
-      let records = [...MOCK_RECORDS];
+      const searchOptions: any = {
+        page: options?.page || 1,
+        pageSize: options?.pageSize || 20,
+      };
       
       if (options?.patientId) {
-        records = records.filter(r => r.patientId === options.patientId);
+        searchOptions.patientId = parseInt(options.patientId);
       }
       if (options?.staffId) {
-        records = records.filter(r => r.dispensedBy === options.staffId);
+        searchOptions.staffId = parseInt(options.staffId);
       }
       if (options?.status) {
-        records = records.filter(r => r.status === options.status);
+        searchOptions.status = options.status;
       }
       if (options?.dateFrom) {
-        const fromDate = new Date(options.dateFrom);
-        records = records.filter(r => r.dispensedAt >= fromDate);
+        searchOptions.dateFrom = options.dateFrom;
       }
       if (options?.dateTo) {
-        const toDate = new Date(options.dateTo);
-        records = records.filter(r => r.dispensedAt <= toDate);
+        searchOptions.dateTo = options.dateTo;
       }
+
+      if (!window.electron?.dispensing?.getAll) {
+        throw new Error('Dispensing API is not available');
+      }
+      const results = await window.electron.dispensing.getAll(searchOptions);
       
-      records.sort((a, b) => b.dispensedAt.getTime() - a.dispensedAt.getTime());
-      
-      const total = records.length;
-      const start = (page - 1) * pageSize;
-      const end = start + pageSize;
-      const paginatedRecords = records.slice(start, end);
+      // Handle both array and paginated response formats
+      const rawData = Array.isArray(results) ? results : (results.data || []);
+      const total = Array.isArray(results) ? rawData.length : (results.total || rawData.length);
+      const page = Array.isArray(results) ? 1 : (results.page || 1);
+      const pageSize = Array.isArray(results) ? rawData.length : (results.pageSize || 20);
+
+      const toRecordStatus = (s: string): 'active' | 'corrected' | 'voided' => {
+        if (s === 'completed') return 'active';
+        return ['active', 'corrected', 'voided'].includes(s) ? (s as 'active' | 'corrected' | 'voided') : 'active';
+      };
+      const buildDispensedAt = (r: any): Date => {
+        if (r.dispensed_at) return new Date(r.dispensed_at);
+        if (r.created_at) return new Date(r.created_at);
+        if (r.dispensing_date) {
+          const time = r.dispensing_time || '00:00:00';
+          return new Date(`${r.dispensing_date}T${time}`);
+        }
+        return new Date();
+      };
+
+      // Transform to DispenseRecord format (same backend shape as getDispenseRecords)
+      const data = rawData.map((r: any) => {
+        const patientName = r.patient
+          ? [r.patient.first_name, r.patient.last_name].filter(Boolean).join(' ').trim()
+          : [r.patient_first_name, r.patient_last_name].filter(Boolean).join(' ').trim() || '';
+        const patientChartNumber = r.patient?.chart_number ?? r.chart_number ?? '';
+        const dispensedByName = r.staff
+          ? [r.staff.first_name, r.staff.last_name].filter(Boolean).join(' ').trim()
+          : [r.staff_first_name, r.staff_last_name].filter(Boolean).join(' ').trim() || '';
+        const items = r.items ?? r.line_items ?? r.medications ?? [];
+        const reasons: string[] = Array.isArray(r.reasons)
+          ? r.reasons.map((x: any) => (typeof x === 'string' ? x : x?.reason_name ?? ''))
+          : r.reason ? [r.reason] : [];
+        return {
+          id: r.id?.toString() || r.record_id?.toString(),
+          patientId: r.patient_id?.toString(),
+          patientName,
+          patientChartNumber,
+          medications: items.map((item: any) => ({
+            id: item.id?.toString() || Math.random().toString(36).substr(2, 9),
+            medicationId: item.medication_id?.toString(),
+            medicationName: item.medication_name,
+            lotId: item.inventory_id?.toString(),
+            lotNumber: item.lot_number,
+            amount: item.amount_value ?? item.quantity_dispensed ?? item.amount ?? 0,
+            unit: item.amount_unit ?? item.unit ?? 'tablets',
+            expirationDate: item.expiration_date ? new Date(item.expiration_date) : null,
+          })),
+          reasons,
+          dispensedBy: (r.staff_id ?? r.dispensed_by)?.toString(),
+          dispensedByName,
+          dispensedAt: buildDispensedAt(r),
+          status: toRecordStatus(r.status || 'active'),
+          notes: r.notes ?? r.additional_notes,
+          recordNumber: r.record_number,
+        };
+      });
       
       return {
-        data: paginatedRecords,
+        data,
         total,
         page,
         pageSize,
       };
     } catch (err) {
-      setError('Failed to search dispenses');
+      const errorMessage = err instanceof Error ? err.message : 'Failed to search dispenses';
+      setError(errorMessage);
       return { data: [], total: 0, page: 1, pageSize: 20 };
     } finally {
       setIsLoading(false);

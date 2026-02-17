@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import { X, Pill, Search } from 'lucide-react';
 import { GuideCard } from './GuideCard';
 import { useInventory } from '../../hooks/useInventory';
-import type { MedicationStock } from '../../types';
 
 interface GuideModalProps {
   isOpen: boolean;

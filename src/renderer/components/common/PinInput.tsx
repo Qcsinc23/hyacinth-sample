@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 
 interface PinInputProps {
   length?: number;
+  value?: string;
   onComplete?: (pin: string) => void;
   onChange?: (pin: string) => void;
   mask?: boolean;
@@ -11,6 +12,7 @@ interface PinInputProps {
 
 export const PinInput: React.FC<PinInputProps> = ({
   length = 4,
+  value,
   onComplete,
   onChange,
   mask = true,
@@ -24,6 +26,19 @@ export const PinInput: React.FC<PinInputProps> = ({
   useEffect(() => {
     inputRefs.current[0]?.focus();
   }, []);
+
+  useEffect(() => {
+    if (typeof value !== 'string') return;
+
+    const normalized = value
+      .replace(/\D/g, '')
+      .slice(0, length)
+      .split('')
+      .slice(0, length);
+
+    const next = Array.from({ length }, (_, idx) => normalized[idx] || '');
+    setPin(next);
+  }, [length, value]);
 
   const handleChange = (index: number, value: string) => {
     if (disabled) return;
@@ -68,9 +83,15 @@ export const PinInput: React.FC<PinInputProps> = ({
     } else if (e.key === 'ArrowLeft' && index > 0) {
       inputRefs.current[index - 1]?.focus();
       setFocusedIndex(index - 1);
+    } else if (e.key === 'ArrowLeft') {
+      inputRefs.current[index]?.focus();
+      setFocusedIndex(index);
     } else if (e.key === 'ArrowRight' && index < length - 1) {
       inputRefs.current[index + 1]?.focus();
       setFocusedIndex(index + 1);
+    } else if (e.key === 'ArrowRight') {
+      inputRefs.current[index]?.focus();
+      setFocusedIndex(index);
     }
   };
 

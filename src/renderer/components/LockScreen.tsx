@@ -17,11 +17,20 @@ export const LockScreen: React.FC<LockScreenProps> = ({ user, onUnlock }) => {
     setError('');
 
     try {
-      const result = await window.electron.staff.verify(pin);
-      if (result && (result as any).id === user.id) {
+      if (!window.electron?.staff?.verify || !window.electron?.app?.unlock) {
+        throw new Error('Application API is not available. Please restart.');
+      }
+      const result = await window.electron.staff.verify(pin) as {
+        success: boolean;
+        staff?: { id: number };
+      };
+      if (result.success && result.staff?.id === user.id) {
         await window.electron.app.unlock();
         onUnlock();
       } else {
+        if (window.electron?.app?.logout) {
+          await window.electron.app.logout();
+        }
         setError('Invalid PIN. Please try again.');
         setPin('');
       }

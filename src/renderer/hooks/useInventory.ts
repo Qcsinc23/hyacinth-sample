@@ -105,7 +105,7 @@ function getDosageFormFromUnit(unit: string): string {
 }
 
 // Mock inventory data (fallback when API is not available)
-const MOCK_INVENTORY: MedicationStock[] = [
+export const MOCK_INVENTORY: MedicationStock[] = [
   {
     id: 'med1',
     name: 'Amoxicillin 500mg',
@@ -180,7 +180,18 @@ export function useInventory() {
   useEffect(() => {
     const fetchInventory = async () => {
       try {
-        if (window.electron?.inventory?.getAllLots) {
+        if (window.electron?.inventory?.search) {
+          // Use search API with empty string to get all inventory
+          const result = await window.electron.inventory.search({ pageSize: 1000 }) as any;
+          if (result?.data) {
+            const stockList = transformInventoryToStock(result.data);
+            setInventory(stockList);
+            console.log('[useInventory] Loaded', stockList.length, 'medications');
+          } else {
+            console.warn('[useInventory] No data in search result:', result);
+          }
+        } else if (window.electron?.inventory?.getAllLots) {
+          // Fallback to getAllLots
           const result = await window.electron.inventory.getAllLots({ pageSize: 1000 }) as any;
           if (result?.data) {
             const stockList = transformInventoryToStock(result.data);
@@ -204,19 +215,30 @@ export function useInventory() {
   }, [inventory]);
 
   const getMedicationById = useCallback(async (id: string): Promise<MedicationStock | null> => {
-    setIsLoading(true);
-    try {
-      await new Promise(resolve => setTimeout(resolve, 150));
-      return inventory.find(m => m.id === id) || null;
-    } finally {
-      setIsLoading(false);
-    }
+    // Synchronous in-memory lookup — no artificial delay
+    return inventory.find(m => m.id === id) || null;
   }, [inventory]);
 
   const searchMedications = useCallback(async (query: string): Promise<MedicationStock[]> => {
     setIsLoading(true);
     try {
-      await new Promise(resolve => setTimeout(resolve, 200));
+      // Actually call the backend API with the search query
+      if (window.electron?.inventory?.search) {
+        // Always call the API, even with empty query, to get fresh results
+        const result = await window.electron.inventory.search({
+          search: query || undefined,  // Don't send empty string
+          pageSize: query ? 100 : 1000  // Get more results when no filter
+        }) as any;
+        if (result?.data) {
+          const stockList = transformInventoryToStock(result.data);
+          return stockList;
+        } else if (Array.isArray(result)) {
+          // Handle case where result is directly an array
+          const stockList = transformInventoryToStock(result);
+          return stockList;
+        }
+      }
+      // Fallback to filtering cached inventory
       const lowerQuery = query.toLowerCase();
       return inventory.filter(m =>
         m.name.toLowerCase().includes(lowerQuery) ||
@@ -268,7 +290,7 @@ export function useInventory() {
     }
   }, []);
 
-  const adjustStock = useCallback(async (medicationId: string, lotId: string, newQuantity: number, reason: string): Promise<void> => {
+  const adjustStock = useCallback(async (medicationId: string, lotId: string, newQuantity: number, _reason: string): Promise<void> => {
     setIsLoading(true);
     setError(null);
     
@@ -545,6 +567,37 @@ export function useInventory() {
   }, [validateLotForDispensing]);
 
   /**
+   * Refresh inventory from the backend
+   * Call this after loading seed data or logging in
+   */
+  const loadInventory = useCallback(async (): Promise<void> => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      if (window.electron?.inventory?.search) {
+        // Use search API with empty string to get all inventory
+        const result = await window.electron.inventory.search({ pageSize: 1000 }) as any;
+        if (result?.data) {
+          const stockList = transformInventoryToStock(result.data);
+          setInventory(stockList);
+          console.log('[useInventory] Refreshed', stockList.length, 'medications');
+        }
+      } else if (window.electron?.inventory?.getAllLots) {
+        const result = await window.electron.inventory.getAllLots({ pageSize: 1000 }) as any;
+        if (result?.data) {
+          const stockList = transformInventoryToStock(result.data);
+          setInventory(stockList);
+        }
+      }
+    } catch (err) {
+      console.error('Failed to refresh inventory:', err);
+      setError('Failed to refresh inventory');
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  /**
    * Get lots that are expiring within a specified timeframe
    */
   const getLotsExpiringWithin = useCallback((days: number): Array<{ lot: MedicationLot; medication: MedicationStock }> => {
@@ -580,6 +633,7 @@ export function useInventory() {
     getLowStockItems,
     getExpiringLots,
     getLotByBarcode,
+    loadInventory,
     // New lot validation functions
     validateLotForDispensing,
     getAvailableLots,

@@ -4,8 +4,6 @@
  */
 
 import { getDatabase } from '../database/db';
-import * as fs from 'fs';
-import * as path from 'path';
 
 // ============================================================================
 // Report Types
@@ -216,8 +214,6 @@ export function generateExpirationReport(days: number): ExpirationReport {
     WHERE i.status IN ('active', 'expired')
     ORDER BY i.expiration_date
   `).all() as any[];
-
-  const todayStr = today.toISOString().split('T')[0];
 
   const processedItems = items.map(item => {
     const expDate = new Date(item.expirationDate);

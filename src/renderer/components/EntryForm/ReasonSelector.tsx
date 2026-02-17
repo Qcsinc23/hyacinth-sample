@@ -1,83 +1,18 @@
-import React, { useState } from 'react';
-import { ChevronDown, ChevronUp, Activity, Shield, Pill, AlertCircle, UserCheck, HelpCircle } from 'lucide-react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
+import { ChevronDown, X } from 'lucide-react';
 import type { DispenseReason, ReasonContext, DispenseReasonConfig } from '../../types';
+import { getReasonContext } from '../../data/reasonInstructionMapping';
 
 interface ReasonSelectorProps {
   selectedReasons: DispenseReason[];
   onChange: (reasons: DispenseReason[]) => void;
   reasonConfigs?: DispenseReasonConfig[];
+  selectedMedicationName?: string;
 }
 
-interface ReasonCategory {
-  context: ReasonContext;
-  label: string;
-  icon: React.ReactNode;
-  description: string;
-  bgColor: string;
-  borderColor: string;
-  textColor: string;
-}
-
-const categories: ReasonCategory[] = [
-  {
-    context: 'treatment',
-    label: 'Treatment',
-    icon: <Activity className="h-4 w-4" />,
-    description: 'Medications for treating existing conditions',
-    bgColor: 'bg-blue-50',
-    borderColor: 'border-blue-200',
-    textColor: 'text-blue-700',
-  },
-  {
-    context: 'prep',
-    label: 'PrEP',
-    icon: <UserCheck className="h-4 w-4" />,
-    description: 'Pre-Exposure Prophylaxis for ongoing prevention',
-    bgColor: 'bg-teal-50',
-    borderColor: 'border-teal-200',
-    textColor: 'text-teal-700',
-  },
-  {
-    context: 'pep',
-    label: 'PEP',
-    icon: <AlertCircle className="h-4 w-4" />,
-    description: 'Post-Exposure Prophylaxis for emergency prevention',
-    bgColor: 'bg-amber-50',
-    borderColor: 'border-amber-200',
-    textColor: 'text-amber-700',
-  },
-  {
-    context: 'prevention',
-    label: 'Prevention',
-    icon: <Shield className="h-4 w-4" />,
-    description: 'Medications to prevent infections or conditions',
-    bgColor: 'bg-emerald-50',
-    borderColor: 'border-emerald-200',
-    textColor: 'text-emerald-700',
-  },
-  {
-    context: 'prophylaxis',
-    label: 'Prophylaxis',
-    icon: <Pill className="h-4 w-4" />,
-    description: 'Preventive treatments for at-risk patients',
-    bgColor: 'bg-purple-50',
-    borderColor: 'border-purple-200',
-    textColor: 'text-purple-700',
-  },
-  {
-    context: 'other',
-    label: 'General',
-    icon: <HelpCircle className="h-4 w-4" />,
-    description: 'General dispensing reasons',
-    bgColor: 'bg-gray-50',
-    borderColor: 'border-gray-200',
-    textColor: 'text-gray-700',
-  },
-];
-
-// Default reason configurations
+// Grouped reason options
 const defaultReasonConfigs: DispenseReasonConfig[] = [
-  // Treatment reasons
+  // Treatment
   { value: 'HIV Treatment - Initial', label: 'HIV Treatment - Initial', context: 'treatment', color: 'blue', linksToInstructions: true, description: 'Starting HIV antiretroviral therapy' },
   { value: 'HIV Treatment - Continuation', label: 'HIV Treatment - Continuation', context: 'treatment', color: 'blue', linksToInstructions: true, description: 'Continuing existing HIV regimen' },
   { value: 'STI Treatment - Chlamydia', label: 'STI - Chlamydia', context: 'treatment', color: 'blue', linksToInstructions: true, description: 'Chlamydia infection treatment' },
@@ -88,22 +23,22 @@ const defaultReasonConfigs: DispenseReasonConfig[] = [
   { value: 'Skin Infection Treatment', label: 'Skin Infection', context: 'treatment', color: 'blue', linksToInstructions: true, description: 'Skin/soft tissue infection treatment' },
   { value: 'Respiratory Infection Treatment', label: 'Respiratory Infection', context: 'treatment', color: 'blue', linksToInstructions: true, description: 'Respiratory infection treatment' },
   { value: 'Other Infection Treatment', label: 'Other Infection', context: 'treatment', color: 'blue', linksToInstructions: true, description: 'Other infection treatment' },
-  // PrEP reasons
+  // PrEP
   { value: 'PrEP - Daily', label: 'PrEP - Daily', context: 'prep', color: 'teal', linksToInstructions: true, description: 'Daily pre-exposure prophylaxis' },
   { value: 'PrEP - On-Demand', label: 'PrEP - On-Demand', context: 'prep', color: 'teal', linksToInstructions: true, description: 'Event-driven PrEP (2-1-1)' },
   { value: 'PrEP - Event-Driven', label: 'PrEP - Event-Driven', context: 'prep', color: 'teal', linksToInstructions: true, description: 'Event-driven PrEP regimen' },
-  // PEP reasons
+  // PEP
   { value: 'nPEP - 28 Day Course', label: 'nPEP - 28 Day', context: 'pep', color: 'amber', linksToInstructions: true, description: 'Non-occupational PEP for 28 days' },
   { value: 'nPEP - Occupational', label: 'nPEP - Occupational', context: 'pep', color: 'amber', linksToInstructions: true, description: 'Occupational exposure PEP' },
-  // Prevention reasons
+  // Prevention
   { value: 'Doxy-PEP', label: 'Doxy-PEP', context: 'prevention', color: 'emerald', linksToInstructions: true, description: 'Doxycycline post-exposure prophylaxis' },
-  // Prophylaxis reasons
+  // Prophylaxis
   { value: 'PCP Prophylaxis', label: 'PCP Prophylaxis', context: 'prophylaxis', color: 'purple', linksToInstructions: true, description: 'Pneumocystis pneumonia prevention' },
   { value: 'Toxoplasmosis Prophylaxis', label: 'Toxoplasmosis Prophylaxis', context: 'prophylaxis', color: 'purple', linksToInstructions: true, description: 'Toxoplasmosis prevention' },
   { value: 'MAC Prophylaxis', label: 'MAC Prophylaxis', context: 'prophylaxis', color: 'purple', linksToInstructions: true, description: 'Mycobacterium avium complex prevention' },
   { value: 'Herpes Prophylaxis', label: 'Herpes Prophylaxis', context: 'prophylaxis', color: 'purple', linksToInstructions: true, description: 'Herpes simplex prevention' },
   { value: 'Fungal Prophylaxis', label: 'Fungal Prophylaxis', context: 'prophylaxis', color: 'purple', linksToInstructions: true, description: 'Fungal infection prevention' },
-  // General/Other reasons
+  // General
   { value: 'Scheduled Medication', label: 'Scheduled Medication', context: 'other', color: 'gray', linksToInstructions: false, description: 'Regularly scheduled medication' },
   { value: 'PRN (As Needed)', label: 'PRN (As Needed)', context: 'other', color: 'gray', linksToInstructions: false, description: 'As needed medication' },
   { value: 'STAT/Emergency', label: 'STAT/Emergency', context: 'other', color: 'red', linksToInstructions: false, description: 'Emergency medication' },
@@ -113,36 +48,108 @@ const defaultReasonConfigs: DispenseReasonConfig[] = [
   { value: 'Waste', label: 'Waste', context: 'other', color: 'gray', linksToInstructions: false, description: 'Wasted medication' },
 ];
 
-const getSelectedColor = (context: ReasonContext): string => {
-  const colorMap: Record<ReasonContext, string> = {
-    treatment: 'bg-blue-100 text-blue-700 border-blue-300',
-    prevention: 'bg-emerald-100 text-emerald-700 border-emerald-300',
-    prophylaxis: 'bg-purple-100 text-purple-700 border-purple-300',
-    pep: 'bg-amber-100 text-amber-700 border-amber-300',
-    prep: 'bg-teal-100 text-teal-700 border-teal-300',
-    other: 'bg-gray-100 text-gray-700 border-gray-300',
-  };
-  return colorMap[context];
+const groupLabels: Record<ReasonContext, string> = {
+  treatment: 'Treatment',
+  prep: 'PrEP',
+  pep: 'PEP',
+  prevention: 'Prevention',
+  prophylaxis: 'Prophylaxis',
+  other: 'General',
+};
+
+const chipColors: Record<ReasonContext, string> = {
+  treatment: 'bg-blue-100 text-blue-700',
+  prep: 'bg-teal-100 text-teal-700',
+  pep: 'bg-amber-100 text-amber-700',
+  prevention: 'bg-emerald-100 text-emerald-700',
+  prophylaxis: 'bg-purple-100 text-purple-700',
+  other: 'bg-gray-100 text-gray-700',
 };
 
 export const ReasonSelector: React.FC<ReasonSelectorProps> = ({
   selectedReasons,
   onChange,
   reasonConfigs = defaultReasonConfigs,
+  selectedMedicationName,
 }) => {
-  const [expandedCategories, setExpandedCategories] = useState<Set<ReasonContext>>(
-    new Set(['treatment', 'prep', 'pep', 'prevention', 'prophylaxis', 'other'])
-  );
+  const [isOpen, setIsOpen] = useState(false);
+  const [search, setSearch] = useState('');
+  const containerRef = useRef<HTMLDivElement>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
 
-  const toggleCategory = (context: ReasonContext) => {
-    const newExpanded = new Set(expandedCategories);
-    if (newExpanded.has(context)) {
-      newExpanded.delete(context);
-    } else {
-      newExpanded.add(context);
+  // Close on click outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  // Focus search when dropdown opens
+  useEffect(() => {
+    if (isOpen && searchRef.current) {
+      searchRef.current.focus();
     }
-    setExpandedCategories(newExpanded);
-  };
+  }, [isOpen]);
+
+  // Fetch available contexts for selected medication
+  const [availableContexts, setAvailableContexts] = useState<ReasonContext[]>([]);
+  useEffect(() => {
+    const fetchContexts = async () => {
+      if (selectedMedicationName && window.electron?.instruction?.getContextsForMedication) {
+        try {
+          const contexts = await window.electron.instruction.getContextsForMedication(selectedMedicationName);
+          setAvailableContexts(contexts || []);
+        } catch (error) {
+          console.error('Failed to fetch contexts for medication:', error);
+          setAvailableContexts([]);
+        }
+      } else {
+        setAvailableContexts([]);
+      }
+    };
+    fetchContexts();
+  }, [selectedMedicationName]);
+
+  // Recommended reasons based on medication
+  const recommendedReasons = useMemo(() => {
+    if (availableContexts.length === 0) return new Set<DispenseReason>();
+    const recommended = new Set<DispenseReason>();
+    reasonConfigs.forEach(reason => {
+      const reasonCtx = getReasonContext(reason.value);
+      if (availableContexts.includes(reasonCtx)) {
+        recommended.add(reason.value);
+      }
+    });
+    return recommended;
+  }, [availableContexts, reasonConfigs]);
+
+  // Group and filter reasons
+  const groupedReasons = useMemo(() => {
+    const filtered = search
+      ? reasonConfigs.filter(r => r.label.toLowerCase().includes(search.toLowerCase()))
+      : reasonConfigs;
+
+    const groups: Record<ReasonContext, DispenseReasonConfig[]> = {
+      treatment: [],
+      prep: [],
+      pep: [],
+      prevention: [],
+      prophylaxis: [],
+      other: [],
+    };
+
+    filtered.forEach(r => {
+      if (groups[r.context]) {
+        groups[r.context].push(r);
+      }
+    });
+
+    return groups;
+  }, [reasonConfigs, search]);
 
   const toggleReason = (reason: DispenseReason) => {
     if (selectedReasons.includes(reason)) {
@@ -152,156 +159,138 @@ export const ReasonSelector: React.FC<ReasonSelectorProps> = ({
     }
   };
 
-  const toggleCategoryAll = (context: ReasonContext) => {
-    const categoryReasons = reasonConfigs.filter(r => r.context === context);
-    const allSelected = categoryReasons.every(r => selectedReasons.includes(r.value));
-
-    if (allSelected) {
-      // Deselect all in category
-      onChange(selectedReasons.filter(r => !categoryReasons.some(cr => cr.value === r)));
-    } else {
-      // Select all in category
-      const newSelected = [...selectedReasons];
-      categoryReasons.forEach(cr => {
-        if (!newSelected.includes(cr.value)) {
-          newSelected.push(cr.value);
-        }
-      });
-      onChange(newSelected);
-    }
+  const removeReason = (reason: DispenseReason) => {
+    onChange(selectedReasons.filter(r => r !== reason));
   };
 
-  // Group reasons by category
-  const groupedReasons = categories.map(category => ({
-    ...category,
-    reasons: reasonConfigs.filter(r => r.context === category.context),
-  }));
+  const getContextForReason = (reason: DispenseReason): ReasonContext => {
+    const config = reasonConfigs.find(r => r.value === reason);
+    return config?.context || 'other';
+  };
+
+  const getLabelForReason = (reason: DispenseReason): string => {
+    const config = reasonConfigs.find(r => r.value === reason);
+    return config?.label || reason;
+  };
+
+  const hasGroupedResults = Object.values(groupedReasons).some(g => g.length > 0);
 
   return (
-    <div className="space-y-3">
-      {groupedReasons.map(category => {
-        const isExpanded = expandedCategories.has(category.context);
-        const categorySelectedCount = category.reasons.filter(r =>
-          selectedReasons.includes(r.value)
-        ).length;
-        const allCategorySelected = categorySelectedCount === category.reasons.length;
+    <div ref={containerRef} className="relative">
+      {/* Trigger button styled like a select */}
+      <button
+        type="button"
+        onClick={() => setIsOpen(!isOpen)}
+        className="w-full flex items-center justify-between rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-left shadow-sm hover:border-gray-400 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-colors"
+      >
+        <span className={`text-sm ${selectedReasons.length === 0 ? 'text-gray-400' : 'text-gray-700'}`}>
+          {selectedReasons.length === 0
+            ? 'Select dispensing reason(s)...'
+            : `${selectedReasons.length} reason${selectedReasons.length !== 1 ? 's' : ''} selected`}
+        </span>
+        <ChevronDown className={`h-4 w-4 text-gray-400 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+      </button>
 
-        return (
-          <div
-            key={category.context}
-            className={`rounded-lg border-2 overflow-hidden transition-all duration-200 ${category.borderColor}`}
-          >
-            {/* Category Header */}
-            <button
-              type="button"
-              onClick={() => toggleCategory(category.context)}
-              className={`
-                w-full flex items-center justify-between p-3 transition-colors
-                ${category.bgColor} hover:opacity-90
-              `}
-            >
-              <div className="flex items-center gap-2">
-                <span className={category.textColor}>{category.icon}</span>
-                <div className="text-left">
-                  <div className={`font-semibold ${category.textColor}`}>
-                    {category.label}
-                    {categorySelectedCount > 0 && (
-                      <span className={`ml-2 text-sm font-normal opacity-80`}>
-                        ({categorySelectedCount} selected)
-                      </span>
-                    )}
-                  </div>
-                  <div className={`text-xs opacity-80 ${category.textColor}`}>
-                    {category.description}
-                  </div>
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                {/* Select All Checkbox for Category */}
+      {/* Selected reasons as chips */}
+      {selectedReasons.length > 0 && (
+        <div className="flex flex-wrap gap-1.5 mt-2">
+          {selectedReasons.map(reason => {
+            const ctx = getContextForReason(reason);
+            return (
+              <span
+                key={reason}
+                className={`inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium ${chipColors[ctx]}`}
+              >
+                {getLabelForReason(reason)}
                 <button
                   type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    toggleCategoryAll(category.context);
-                  }}
-                  className={`
-                    p-1 rounded border-2 flex items-center justify-center transition-colors
-                    ${allCategorySelected
-                      ? `${getSelectedColor(category.context)}`
-                      : 'bg-white border-gray-300 hover:border-gray-400'
-                    }
-                  `}
-                  aria-label={`Select all ${category.label}`}
+                  onClick={() => removeReason(reason)}
+                  className="hover:opacity-70"
                 >
-                  {allCategorySelected && (
-                    <svg className="w-3 h-3 text-current" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                    </svg>
-                  )}
+                  <X className="h-3 w-3" />
                 </button>
-                {/* Expand/Collapse Icon */}
-                <span className={category.textColor}>
-                  {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-                </span>
-              </div>
-            </button>
+              </span>
+            );
+          })}
+        </div>
+      )}
 
-            {/* Category Reasons */}
-            {isExpanded && (
-              <div className="p-3 bg-white border-t border-gray-100">
-                <div className="flex flex-wrap gap-2">
-                  {category.reasons.map(reason => {
-                    const isSelected = selectedReasons.includes(reason.value);
-                    return (
-                      <button
-                        key={reason.value}
-                        type="button"
-                        onClick={() => toggleReason(reason.value)}
-                        className={`
-                          px-3 py-2 rounded-lg border-2 font-medium text-sm transition-all duration-200
-                          ${isSelected
-                            ? `${getSelectedColor(category.context)}`
-                            : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300 hover:bg-gray-50'
-                          }
-                        `}
-                        title={reason.description}
-                      >
-                        <span className="flex items-center gap-2">
-                          <span className={`
-                            w-3.5 h-3.5 rounded border-2 flex items-center justify-center transition-colors
-                            ${isSelected ? 'border-current bg-current' : 'border-gray-300'}
-                          `}>
-                            {isSelected && (
-                              <svg className="w-2.5 h-2.5 text-white" fill="currentColor" viewBox="0 0 20 20">
-                                <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                              </svg>
-                            )}
-                          </span>
-                          {reason.label}
-                          {reason.linksToInstructions && (
-                            <span className="text-xs opacity-70">
-                              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                            </svg>
+      {/* Dropdown */}
+      {isOpen && (
+        <div className="absolute z-30 mt-1 w-full bg-white rounded-lg shadow-lg border border-gray-200 max-h-72 overflow-hidden">
+          {/* Search within dropdown */}
+          <div className="p-2 border-b border-gray-100">
+            <input
+              ref={searchRef}
+              type="text"
+              placeholder="Search reasons..."
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              className="w-full text-sm rounded-md border border-gray-200 px-2.5 py-1.5 focus:border-blue-400 focus:ring-1 focus:ring-blue-400 focus:outline-none"
+            />
+          </div>
+
+          {/* Grouped options */}
+          <div className="overflow-y-auto max-h-56">
+            {!hasGroupedResults && (
+              <p className="p-3 text-sm text-gray-500 text-center">No reasons match your search</p>
+            )}
+
+            {(Object.entries(groupedReasons) as [ReasonContext, DispenseReasonConfig[]][]).map(
+              ([context, reasons]) => {
+                if (reasons.length === 0) return null;
+                return (
+                  <div key={context}>
+                    <div className="px-3 py-1.5 bg-gray-50 text-xs font-semibold text-gray-500 uppercase tracking-wide sticky top-0">
+                      {groupLabels[context]}
+                    </div>
+                    {reasons.map(reason => {
+                      const isSelected = selectedReasons.includes(reason.value);
+                      const isRecommended = recommendedReasons.has(reason.value);
+                      return (
+                        <button
+                          key={reason.value}
+                          type="button"
+                          onClick={() => toggleReason(reason.value)}
+                          className={`w-full text-left px-3 py-2 text-sm flex items-center justify-between hover:bg-gray-50 transition-colors ${
+                            isSelected ? 'bg-blue-50' : ''
+                          }`}
+                        >
+                          <div className="flex items-center gap-2">
+                            <span
+                              className={`w-4 h-4 rounded border-2 flex items-center justify-center flex-shrink-0 ${
+                                isSelected
+                                  ? 'bg-blue-600 border-blue-600'
+                                  : 'border-gray-300'
+                              }`}
+                            >
+                              {isSelected && (
+                                <svg className="w-2.5 h-2.5 text-white" fill="currentColor" viewBox="0 0 20 20">
+                                  <path
+                                    fillRule="evenodd"
+                                    d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+                                    clipRule="evenodd"
+                                  />
+                                </svg>
+                              )}
+                            </span>
+                            <span className={isSelected ? 'font-medium text-gray-900' : 'text-gray-700'}>
+                              {reason.label}
+                            </span>
+                          </div>
+                          {isRecommended && !isSelected && (
+                            <span className="text-xs text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded">
+                              Suggested
                             </span>
                           )}
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                );
+              }
             )}
           </div>
-        );
-      })}
-
-      {/* Context Summary */}
-      {selectedReasons.length > 0 && (
-        <div className="p-3 bg-gray-50 rounded-lg border border-gray-200">
-          <p className="text-sm text-gray-600">
-            <span className="font-semibold">{selectedReasons.length}</span> reason{selectedReasons.length !== 1 ? 's' : ''} selected
-          </p>
         </div>
       )}
     </div>

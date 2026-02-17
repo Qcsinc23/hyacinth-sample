@@ -367,7 +367,7 @@ export function getInventoryTransactions(inventoryId?: number, limit = 100): Inv
 /**
  * Check and create alerts for inventory item
  */
-function checkAndCreateAlerts(inventoryId: number): void {
+export function checkAndCreateAlerts(inventoryId: number): void {
   const db = getDatabase();
   const now = new Date().toISOString();
   const today = now.split('T')[0];
@@ -458,7 +458,7 @@ function checkAndCreateAlerts(inventoryId: number): void {
 /**
  * Quarantine inventory item
  */
-export function quarantineInventory(inventoryId: number, reason: string, staffId: number): Inventory {
+export function quarantineInventory(inventoryId: number, reason: string, _staffId: number): Inventory {
   const db = getDatabase();
   const now = new Date().toISOString();
 
@@ -476,7 +476,6 @@ export function quarantineInventory(inventoryId: number, reason: string, staffId
  * Comprehensive validation including expiration, quantity, and status checks
  */
 export function validateLotForDispensing(lotId: number, quantity: number): LotValidationResult {
-  const db = getDatabase();
   const errors: string[] = [];
   const warnings: string[] = [];
 

@@ -14,25 +14,17 @@ const SESSION_WARNING_MS = 60 * 1000; // 1 minute warning
 const MAX_FAILED_ATTEMPTS = 5;
 const LOCKOUT_DURATION_MS = 30 * 60 * 1000; // 30 minutes
 
-// Simple hash function for PINs (in production, use bcrypt via main process)
-const hashPin = (pin: string): string => {
-  // This is a simple hash for demo purposes
-  let hash = 0;
-  for (let i = 0; i < pin.length; i++) {
-    const char = pin.charCodeAt(i);
-    hash = ((hash << 5) - hash) + char;
-    hash = hash & hash;
-  }
-  return hash.toString(16);
+// Role mapping: backend roles → renderer roles
+const mapRole = (backendRole: string): Staff['role'] => {
+  const roleMap: Record<string, Staff['role']> = {
+    admin: 'admin',
+    dispenser: 'technician',
+    nurse: 'nurse',
+    pharmacist: 'pharmacist',
+    technician: 'technician',
+  };
+  return roleMap[backendRole] || 'technician';
 };
-
-// Mock staff data with hashed PINs
-const MOCK_STAFF: Staff[] = [
-  { id: '1', name: 'Sarah Johnson', role: 'nurse', pin: hashPin('1234'), isActive: true },
-  { id: '2', name: 'Michael Chen', role: 'pharmacist', pin: hashPin('5678'), isActive: true },
-  { id: '3', name: 'Emily Davis', role: 'admin', pin: hashPin('9012'), isActive: true },
-  { id: '4', name: 'Robert Wilson', role: 'technician', pin: hashPin('3456'), isActive: true },
-];
 
 interface LoginResult {
   success: boolean;
@@ -71,6 +63,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const sessionTimerRef = useRef<NodeJS.Timeout | null>(null);
   const countdownTimerRef = useRef<NodeJS.Timeout | null>(null);
   const lockoutTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const isWarningVisibleRef = useRef<boolean>(false);
 
   // Update activity timestamp
   const updateActivity = useCallback(() => {
@@ -104,6 +97,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     console.log('[Session] Session manually locked');
   }, [clearAllTimers]);
 
+  // Sync ref with state
+  useEffect(() => {
+    isWarningVisibleRef.current = isWarningVisible;
+  }, [isWarningVisible]);
+
   // Setup session timeout countdown
   const setupSessionTimeout = useCallback(() => {
     clearAllTimers();
@@ -114,8 +112,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const remaining = Math.max(0, SESSION_TIMEOUT_MS - elapsed);
       setSessionTimeRemainingMs(remaining);
       
-      // Show warning when approaching timeout
-      if (remaining <= SESSION_WARNING_MS && remaining > 0 && !isWarningVisible) {
+      // Show warning when approaching timeout (use ref to avoid stale closure)
+      if (remaining <= SESSION_WARNING_MS && remaining > 0 && !isWarningVisibleRef.current) {
         setIsWarningVisible(true);
         setSessionWarning(true);
       }
@@ -128,7 +126,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         console.log('[Session] Session timed out due to inactivity');
       }
     }, 1000);
-  }, [clearAllTimers, isWarningVisible]);
+  }, [clearAllTimers]);
 
   // Monitor lockout countdown
   useEffect(() => {
@@ -150,6 +148,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (lockoutTimerRef.current) clearInterval(lockoutTimerRef.current);
       };
     }
+    return undefined;
   }, [lockoutEndTime, isLocked]);
 
   // Track user activity when authenticated
@@ -175,6 +174,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         clearAllTimers();
       };
     }
+    return undefined;
   }, [staff, updateActivity, setupSessionTimeout, clearAllTimers, isWarningVisible]);
 
   const login = useCallback(async (pin: string): Promise<LoginResult> => {
@@ -186,58 +186,72 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       };
     }
 
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 500));
-    
-    // Hash the entered PIN for comparison
-    const hashedPin = hashPin(pin);
-    const found = MOCK_STAFF.find(s => s.pin === hashedPin && s.isActive);
-    
-    if (found) {
-      setStaff(found);
-      setFailedAttempts(0);
-      setIsLocked(false);
-      setLockoutEndTime(null);
-      setSessionWarning(false);
-      setIsWarningVisible(false);
-      lastActivityRef.current = Date.now();
-      setupSessionTimeout();
-      
-      // Log successful login
-      console.log(`[Auth] Login successful for ${found.name}`);
-      
-      return { success: true };
-    }
+    try {
+      // Verify PIN via main process (this also creates a session on success)
+      if (!window.electron?.staff?.verify) {
+        console.error('[Auth] window.electron.staff.verify is not available', {
+          electronDefined: typeof window.electron !== 'undefined',
+          staffDefined: typeof window.electron?.staff !== 'undefined',
+        });
+        return { success: false, message: 'Application is still loading. Please wait a moment and try again.' };
+      }
 
-    // Increment failed attempts
-    const newFailedAttempts = failedAttempts + 1;
-    setFailedAttempts(newFailedAttempts);
+      const result = await window.electron.staff.verify(pin) as any;
 
-    // Log failed attempt
-    console.log(`[Auth] Login failed - attempt ${newFailedAttempts}`);
+      // Backend returns { success: true, staff: { id, first_name, last_name, role, ... } }
+      if (result?.success && result?.staff) {
+        const backendStaff = result.staff;
+        const staffObj: Staff = {
+          id: String(backendStaff.id),
+          name: `${backendStaff.first_name} ${backendStaff.last_name}`,
+          role: mapRole(backendStaff.role),
+          pin: '', // Not stored client-side
+          isActive: true,
+        };
 
-    // Check if should lock account
-    if (newFailedAttempts >= MAX_FAILED_ATTEMPTS) {
-      const lockoutEnd = new Date(Date.now() + LOCKOUT_DURATION_MS);
-      setIsLocked(true);
-      setLockoutEndTime(lockoutEnd);
-      
-      console.log(`[Auth] Account locked due to ${newFailedAttempts} failed attempts`);
-      
+        setStaff(staffObj);
+        setFailedAttempts(0);
+        setIsLocked(false);
+        setLockoutEndTime(null);
+        setSessionWarning(false);
+        setIsWarningVisible(false);
+        lastActivityRef.current = Date.now();
+        setupSessionTimeout();
+
+        console.log(`[Auth] Login successful for ${staffObj.name} (${staffObj.role})`);
+        return { success: true };
+      }
+
+      // PIN verification failed
+      const newFailedAttempts = failedAttempts + 1;
+      setFailedAttempts(newFailedAttempts);
+      console.log(`[Auth] Login failed - attempt ${newFailedAttempts}`);
+
+      if (newFailedAttempts >= MAX_FAILED_ATTEMPTS) {
+        const lockoutEnd = new Date(Date.now() + LOCKOUT_DURATION_MS);
+        setIsLocked(true);
+        setLockoutEndTime(lockoutEnd);
+        console.log(`[Auth] Account locked due to ${newFailedAttempts} failed attempts`);
+        return {
+          success: false,
+          message: `Too many failed attempts. Account locked for 30 minutes.`,
+        };
+      }
+
       return {
         success: false,
-        message: `Too many failed attempts. Account locked for 30 minutes.`,
+        message: `Invalid PIN. ${MAX_FAILED_ATTEMPTS - newFailedAttempts} attempts remaining.`,
       };
+    } catch (err) {
+      console.error('[Auth] Login error:', err);
+      return { success: false, message: 'Login failed. Please try again.' };
     }
-
-    return {
-      success: false,
-      message: `Invalid PIN. ${MAX_FAILED_ATTEMPTS - newFailedAttempts} attempts remaining.`,
-    };
   }, [failedAttempts, isLocked, lockoutTimeRemaining, setupSessionTimeout]);
 
   const logout = useCallback(() => {
     console.log(`[Auth] Logout for ${staff?.name}`);
+    // Clear main process session
+    window.electron?.app?.logout?.().catch(() => {});
     setStaff(null);
     setFailedAttempts(0);
     setSessionWarning(false);

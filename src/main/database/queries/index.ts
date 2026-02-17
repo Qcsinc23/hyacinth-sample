@@ -10,3 +10,4 @@ export * from './inventory';
 export * from './audit';
 export * from './alerts';
 export * from './drafts';
+export * from './medicationCatalog';

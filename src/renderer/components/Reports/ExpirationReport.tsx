@@ -5,7 +5,6 @@ import {
   Printer, 
   AlertTriangle,
   AlertCircle,
-  CheckCircle,
   RefreshCw,
   Clock
 } from 'lucide-react';
@@ -20,6 +19,9 @@ export const ExpirationReport: React.FC = () => {
   const fetchReport = async () => {
     setLoading(true);
     try {
+      if (!window.electron?.reports?.expiration) {
+        throw new Error('Reports API is not available');
+      }
       const data = await window.electron.reports.expiration(days);
       setReport(data);
     } catch (error) {

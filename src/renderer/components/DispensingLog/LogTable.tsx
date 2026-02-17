@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Eye, Edit2, Ban, FileText, MoreVertical, CheckCircle2, AlertCircle, XCircle } from 'lucide-react';
+import { Eye, Edit2, Ban, CheckCircle2, AlertCircle, XCircle } from 'lucide-react';
 import type { DispenseRecord, RecordStatus } from '../../types';
 import { useDatabase } from '../../hooks/useDatabase';
+import { sanitizeInput } from '../../utils/sanitize';
 
 interface LogTableProps {
   onViewRecord: (record: DispenseRecord) => void;
@@ -59,12 +60,12 @@ export const LogTable: React.FC<LogTableProps> = ({
   };
 
   const filteredRecords = records.filter(record => {
-    const query = searchQuery.toLowerCase();
+    const query = sanitizeInput(searchQuery).toLowerCase();
     return (
-      record.patientName.toLowerCase().includes(query) ||
-      record.patientChartNumber.toLowerCase().includes(query) ||
-      record.dispensedByName.toLowerCase().includes(query) ||
-      record.medications.some(m => m.medicationName.toLowerCase().includes(query))
+      sanitizeInput(record.patientName).toLowerCase().includes(query) ||
+      sanitizeInput(record.patientChartNumber).toLowerCase().includes(query) ||
+      sanitizeInput(record.dispensedByName).toLowerCase().includes(query) ||
+      record.medications.some(m => sanitizeInput(m.medicationName).toLowerCase().includes(query))
     );
   });
 
@@ -122,19 +123,19 @@ export const LogTable: React.FC<LogTableProps> = ({
                     </span>
                   </td>
                   <td className="px-4 py-3">
-                    <div className="text-sm font-medium text-gray-900">{record.patientName}</div>
-                    <div className="text-xs text-gray-500">{record.patientChartNumber}</div>
+                    <div className="text-sm font-medium text-gray-900">{sanitizeInput(record.patientName)}</div>
+                    <div className="text-xs text-gray-500">{sanitizeInput(record.patientChartNumber)}</div>
                   </td>
                   <td className="px-4 py-3">
                     <div className="text-sm text-gray-900">
                       {record.medications.length} medication(s)
                     </div>
                     <div className="text-xs text-gray-500 truncate max-w-xs">
-                      {record.medications.map(m => m.medicationName).join(', ')}
+                      {record.medications.map(m => sanitizeInput(m.medicationName)).join(', ')}
                     </div>
                   </td>
                   <td className="px-4 py-3 whitespace-nowrap">
-                    <div className="text-sm text-gray-900">{record.dispensedByName}</div>
+                    <div className="text-sm text-gray-900">{sanitizeInput(record.dispensedByName)}</div>
                   </td>
                   <td className="px-4 py-3 whitespace-nowrap">
                     <div className="text-sm text-gray-900">

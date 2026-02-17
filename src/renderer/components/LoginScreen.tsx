@@ -16,9 +16,20 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
     setError('');
 
     try {
-      const result = await window.electron.staff.verify(pin);
-      if (result) {
-        onLogin(result as { id: number; name: string; role: string });
+      if (!window.electron?.staff?.verify) {
+        throw new Error('Application API is not available. Please restart.');
+      }
+      const result = await window.electron.staff.verify(pin) as {
+        success: boolean;
+        staff?: { id: number; first_name: string; last_name: string; role: string };
+      };
+
+      if (result.success && result.staff) {
+        onLogin({
+          id: result.staff.id,
+          name: `${result.staff.first_name} ${result.staff.last_name}`,
+          role: result.staff.role,
+        });
       } else {
         setError('Invalid PIN. Please try again.');
         setPin('');

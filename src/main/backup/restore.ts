@@ -11,6 +11,7 @@ import { pipeline } from 'stream/promises';
 import log from 'electron-log';
 import { dialog, app } from 'electron';
 import { generateFileChecksum } from './backup';
+import { getDbPath } from '../database/db';
 
 /**
  * Restore result
@@ -171,12 +172,9 @@ const decompressFile = async (
 };
 
 /**
- * Get default database path
+ * Get default database path (must match db.ts so restore overwrites the live DB).
  */
-const getDefaultDbPath = (): string => {
-  const userDataPath = app.getPath('userData');
-  return path.join(userDataPath, 'database', 'hyacinth.db');
-};
+const getDefaultDbPath = (): string => getDbPath();
 
 /**
  * Show restore dialog and restore from selected file
@@ -296,7 +294,18 @@ export const validateBackup = async (
       
       testDb.close();
       
-      const requiredTables = ['patients', 'dispensing', 'inventory', 'alerts', 'audit_logs'];
+      const requiredTables = [
+        'patients',
+        'staff_members',
+        'dispensing_records',
+        'dispensing_line_items',
+        'record_reasons',
+        'inventory',
+        'inventory_transactions',
+        'inventory_alerts',
+        'audit_log',
+        'app_settings',
+      ];
       const missingTables = requiredTables.filter((t) => !tableNames.includes(t));
       
       if (missingTables.length > 0) {

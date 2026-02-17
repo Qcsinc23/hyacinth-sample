@@ -147,7 +147,7 @@ export interface DispensedMedication {
   lotNumber: string;
   amount: number;
   unit: string;
-  expirationDate: Date;
+  expirationDate: Date | null;
   instructionContext?: InstructionContext;
   daySupply?: number;
   medicationStrength?: string;

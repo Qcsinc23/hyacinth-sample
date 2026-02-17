@@ -21,12 +21,12 @@ export const StaffPinEntry: React.FC<StaffPinEntryProps> = ({ onVerify, onCancel
 
     try {
       // Verify the PIN matches the current user
-      const isValid = await login(enteredPin);
-      
-      if (isValid) {
+      const result = await login(enteredPin);
+
+      if (result.success) {
         onVerify();
       } else {
-        setError('Invalid PIN. Please try again.');
+        setError(result.message || 'Invalid PIN. Please try again.');
         setPin('');
       }
     } catch (err) {

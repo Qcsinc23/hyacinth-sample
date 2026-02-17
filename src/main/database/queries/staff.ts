@@ -45,7 +45,11 @@ export function createStaff(input: CreateStaffInput): StaffMember {
     now
   );
 
-  return getStaffById(Number(result.lastInsertRowid))!;
+  const created = getStaffById(Number(result.lastInsertRowid));
+  if (!created) {
+    throw new Error('Failed to create staff member: record not found after insert');
+  }
+  return created;
 }
 
 /**
@@ -106,7 +110,11 @@ export function updateStaff(id: number, input: UpdateStaffInput): StaffMember {
   
   db.prepare(`UPDATE staff_members SET ${updates.join(', ')} WHERE id = ?`).run(...values);
   
-  return getStaffById(id)!;
+  const updated = getStaffById(id);
+  if (!updated) {
+    throw new Error(`Failed to update staff member ${id}: record not found after update`);
+  }
+  return updated;
 }
 
 /**
@@ -178,4 +186,25 @@ export function isAdmin(staffId: number): boolean {
 export function deleteStaff(id: number): void {
   const db = getDatabase();
   db.prepare('DELETE FROM staff_members WHERE id = ?').run(id);
+}
+
+/**
+ * Change own PIN (authenticated staff only).
+ * Verifies current PIN then sets new PIN. Throws if current PIN is wrong.
+ */
+export function changeOwnPin(staffId: number, currentPin: string, newPin: string): void {
+  const staff = getStaffById(staffId);
+  if (!staff) {
+    throw new Error('Staff member not found');
+  }
+  if (!staff.is_active) {
+    throw new Error('Account is inactive');
+  }
+  if (!verifyPin(currentPin, staff.pin_hash)) {
+    throw new Error('Current PIN is incorrect');
+  }
+  if (!newPin || newPin.length < 4) {
+    throw new Error('New PIN must be at least 4 characters');
+  }
+  updateStaff(staffId, { pin: newPin });
 }

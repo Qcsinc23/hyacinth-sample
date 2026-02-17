@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Search, Plus, Trash2, Printer, Save, AlertCircle, Check } from 'lucide-react';
+import { Search, Plus, Trash2, Save, AlertCircle, Check } from 'lucide-react';
 import { format } from 'date-fns';
 
 interface User {
@@ -68,6 +68,9 @@ export const EntryForm: React.FC<EntryFormProps> = ({ user }) => {
 
   const loadMedications = async () => {
     try {
+      if (!window.electron?.medication?.getAll) {
+        throw new Error('Medication API is not available');
+      }
       const meds = await window.electron.medication.getAll();
       setMedications(meds as Medication[]);
     } catch (err) {
@@ -77,6 +80,7 @@ export const EntryForm: React.FC<EntryFormProps> = ({ user }) => {
 
   const loadDraft = async () => {
     try {
+      if (!window.electron?.drafts?.get) return;
       const draft = await window.electron.drafts.get('entry_form', user.id);
       if (draft) {
         const data = (draft as any).draft_data;
@@ -93,6 +97,7 @@ export const EntryForm: React.FC<EntryFormProps> = ({ user }) => {
 
   const saveDraft = useCallback(async () => {
     try {
+      if (!window.electron?.drafts?.save) return;
       await window.electron.drafts.save('entry_form', {
         chartNumber,
         patient,
@@ -114,6 +119,9 @@ export const EntryForm: React.FC<EntryFormProps> = ({ user }) => {
     setChartNumber(query);
     if (query.length >= 2) {
       try {
+        if (!window.electron?.patient?.search) {
+          throw new Error('Patient API is not available');
+        }
         const results = await window.electron.patient.search(query);
         setPatientSearchResults(results as Patient[]);
         setShowPatientSearch(true);
@@ -163,6 +171,9 @@ export const EntryForm: React.FC<EntryFormProps> = ({ user }) => {
       const medication = medications.find((m) => m.id === value);
       if (medication) {
         try {
+          if (!window.electron?.inventory?.getByMedication) {
+            throw new Error('Inventory API is not available');
+          }
           const inventory = await window.electron.inventory.getByMedication(value);
           const inventoryItems = inventory as InventoryItem[];
           
@@ -214,9 +225,12 @@ export const EntryForm: React.FC<EntryFormProps> = ({ user }) => {
   const confirmSave = async () => {
     setIsSaving(true);
     try {
+      if (!window.electron?.staff?.verify || !window.electron?.dispensing?.create) {
+        throw new Error('Application API is not available. Please restart.');
+      }
       // Verify PIN
-      const verified = await window.electron.staff.verify(pin);
-      if (!verified) {
+      const verified = await window.electron.staff.verify(pin) as { success: boolean };
+      if (!verified.success) {
         setSaveError('Invalid PIN');
         setIsSaving(false);
         return;
@@ -245,7 +259,9 @@ export const EntryForm: React.FC<EntryFormProps> = ({ user }) => {
       await window.electron.dispensing.create(dispensingData);
 
       // Clear draft
-      await window.electron.drafts.delete('entry_form', user.id);
+      if (window.electron?.drafts?.delete) {
+        await window.electron.drafts.delete('entry_form', user.id);
+      }
 
       setSaveSuccess(true);
       setTimeout(() => {
@@ -273,7 +289,10 @@ export const EntryForm: React.FC<EntryFormProps> = ({ user }) => {
 
   const getAvailableLots = async (medicationId: number) => {
     try {
-      const inventory = await window.electron.inventory.getByMedication(medicationId);
+      if (!window.electron?.inventory?.getByMedication) {
+        throw new Error('Inventory API is not available');
+      }
+      const inventory = await window.electron.inventory.getByMedication(String(medicationId));
       return inventory as InventoryItem[];
     } catch (err) {
       return [];

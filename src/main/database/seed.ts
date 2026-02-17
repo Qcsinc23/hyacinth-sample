@@ -106,6 +106,12 @@ const DEFAULT_SETTINGS = {
  * Run seed data
  */
 export function runSeedData(): void {
+  // Only run seed data in development to prevent accidental production seeding
+  if (process.env.NODE_ENV !== 'development') {
+    const log = require('electron-log');
+    log.warn('[Seed] Skipping seed data in production environment');
+    return;
+  }
   const db = getDatabase();
   const now = new Date().toISOString();
   

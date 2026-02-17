@@ -1,9 +1,8 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { PatientLookup } from './PatientLookup';
 import { MedicationLineItem } from './MedicationLineItem';
 import { ReasonSelector } from './ReasonSelector';
 import { StaffPinEntry } from './StaffPinEntry';
-import { FormActions } from './FormActions';
 import { PrintDialog, PrintDialogOptions } from '../PrintDialog';
 import { useForm } from '../../hooks/useForm';
 import { useDatabase } from '../../hooks/useDatabase';
@@ -14,18 +13,17 @@ import type {
   DispensedMedication,
   DispenseRecord,
   ReasonContext,
-  MedicationLineItem as MedicationLineItemType,
   LotValidationResult,
 } from '../../types';
 import { useAuth } from '../../contexts/AuthContext';
 import {
-  DISPENSE_REASONS,
-  MEDICATION_INSTRUCTION_TEMPLATES,
   findReasonConfig,
-  getInstructionTemplate,
-  normalizeMedicationId,
 } from '../../data/medicationInstructions';
-import { AlertTriangle } from 'lucide-react';
+import { AlertTriangle, ChevronLeft, ChevronRight, Check, User, Pill, FileText } from 'lucide-react';
+
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
 
 interface FormValues {
   patientId: string;
@@ -39,7 +37,6 @@ interface MedicationLine {
   lotId: string;
   amount: string;
   unit: string;
-  // Enhanced fields for context-aware instructions
   instructionData?: {
     context: ReasonContext;
     indication: string;
@@ -50,7 +47,17 @@ interface MedicationLine {
     medicationStrength?: string;
   };
   lotValidation?: LotValidationResult;
-  contextOverride?: ReasonContext; // Manual override for context
+  contextOverride?: ReasonContext;
+}
+
+interface InstructionTemplate {
+  context: ReasonContext;
+  indication: string;
+  shortDosing: string;
+  fullInstructions: string[] | string;
+  warnings: string[] | string;
+  daySupplyCalculation?: string;
+  strength?: string;
 }
 
 interface EntryFormContainerProps {
@@ -58,30 +65,46 @@ interface EntryFormContainerProps {
   onViewPatientHistory?: (patient: Patient) => void;
 }
 
-export const EntryFormContainer: React.FC<EntryFormContainerProps> = ({ onSubmitSuccess, onViewPatientHistory }) => {
+// ---------------------------------------------------------------------------
+// Step definitions
+// ---------------------------------------------------------------------------
+
+type Step = 'patient' | 'medications' | 'reason' | 'review';
+
+const STEPS: { key: Step; label: string; icon: React.ReactNode }[] = [
+  { key: 'patient', label: 'Patient', icon: <User className="h-4 w-4" /> },
+  { key: 'medications', label: 'Medications', icon: <Pill className="h-4 w-4" /> },
+  { key: 'reason', label: 'Reason & Notes', icon: <FileText className="h-4 w-4" /> },
+  { key: 'review', label: 'Review', icon: <Check className="h-4 w-4" /> },
+];
+
+// ---------------------------------------------------------------------------
+// Component
+// ---------------------------------------------------------------------------
+
+export const EntryFormContainer: React.FC<EntryFormContainerProps> = ({
+  onSubmitSuccess,
+  onViewPatientHistory,
+}) => {
+  const [currentStep, setCurrentStep] = useState<Step>('patient');
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
   const [medicationLines, setMedicationLines] = useState<MedicationLine[]>([]);
   const [showPinEntry, setShowPinEntry] = useState(false);
   const [showPrintDialog, setShowPrintDialog] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // New state for context-aware dispensing
+  // Context-aware state
   const [detectedContext, setDetectedContext] = useState<ReasonContext | null>(null);
   const [instructionDataMap, setInstructionDataMap] = useState<Map<string, MedicationLine['instructionData']>>(new Map());
   const [lotValidationResults, setLotValidationResults] = useState<Map<string, LotValidationResult>>(new Map());
-  const [showConflictModal, setShowConflictModal] = useState(false);
-  const [conflictDetails, setConflictDetails] = useState<{ contexts: ReasonContext[]; reasons: string[] } | null>(null);
+  const [selectedMedicationName, setSelectedMedicationName] = useState<string | undefined>(undefined);
 
   const { staff } = useAuth();
   const { saveDispenseRecord } = useDatabase();
   const { dispenseMedication, validateLotForDispensing, getMedicationById } = useInventory();
 
   const { values, setValue, reset: resetForm } = useForm<FormValues>({
-    initialValues: {
-      patientId: '',
-      notes: '',
-      reasons: [],
-    },
+    initialValues: { patientId: '', notes: '', reasons: [] },
     validate: (vals) => {
       const errors: Partial<Record<keyof FormValues, string>> = {};
       if (!selectedPatient) errors.patientId = 'Please select a patient';
@@ -90,6 +113,47 @@ export const EntryFormContainer: React.FC<EntryFormContainerProps> = ({ onSubmit
       return errors;
     },
   });
+
+  // ---------------------------------------------------------------------------
+  // Step navigation helpers
+  // ---------------------------------------------------------------------------
+
+  const stepIndex = STEPS.findIndex(s => s.key === currentStep);
+
+  const canGoNext = (): boolean => {
+    switch (currentStep) {
+      case 'patient':
+        return selectedPatient !== null;
+      case 'medications':
+        return medicationLines.length > 0 && medicationLines.every(
+          l => l.medicationId && l.lotId && l.amount && parseFloat(l.amount) > 0
+        );
+      case 'reason':
+        return values.reasons.length > 0;
+      case 'review':
+        return false; // last step
+      default:
+        return false;
+    }
+  };
+
+  const goNext = () => {
+    const idx = stepIndex;
+    if (idx < STEPS.length - 1) {
+      setCurrentStep(STEPS[idx + 1].key);
+    }
+  };
+
+  const goBack = () => {
+    const idx = stepIndex;
+    if (idx > 0) {
+      setCurrentStep(STEPS[idx - 1].key);
+    }
+  };
+
+  // ---------------------------------------------------------------------------
+  // Handlers (preserved from original logic)
+  // ---------------------------------------------------------------------------
 
   const handlePatientSelect = (patient: Patient | null) => {
     setSelectedPatient(patient);
@@ -114,65 +178,118 @@ export const EntryFormContainer: React.FC<EntryFormContainerProps> = ({ onSubmit
   };
 
   const handleMedicationChange = async (id: string, field: keyof MedicationLine, value: string) => {
-    const updatedLines = medicationLines.map(line =>
-      line.id === id ? { ...line, [field]: value } : line
+    // Use functional updater to avoid stale-closure when multiple fields
+    // are updated in quick succession (e.g. medicationId + lotId + unit)
+    setMedicationLines(prev =>
+      prev.map(line => (line.id === id ? { ...line, [field]: value } : line))
     );
-    setMedicationLines(updatedLines);
 
-    // Trigger validation if lot or amount changed
-    if (field === 'lotId' || field === 'amount' || field === 'medicationId') {
-      const line = updatedLines.find(l => l.id === id);
-      if (line && line.medicationId && line.lotId) {
-        const quantity = parseFloat(line.amount) || 0;
-        await validateLot(id, line.medicationId, line.lotId, quantity);
+    // Update selected medication name
+    if (field === 'medicationId') {
+      if (value) {
+        try {
+          const medication = await getMedicationById(value);
+          setSelectedMedicationName(medication?.name);
+        } catch {
+          setSelectedMedicationName(undefined);
+        }
+      } else {
+        // Check remaining lines for a medication
+        setMedicationLines(prev => {
+          const firstMedLine = prev.find(l => l.medicationId);
+          if (firstMedLine) {
+            getMedicationById(firstMedLine.medicationId)
+              .then(med => setSelectedMedicationName(med?.name))
+              .catch(() => setSelectedMedicationName(undefined));
+          } else {
+            setSelectedMedicationName(undefined);
+          }
+          return prev; // no mutation, just reading
+        });
       }
     }
 
-    // Reload instructions if amount changed (affects day supply)
+    // Trigger lot validation -- read latest state via functional access
+    if (field === 'lotId' || field === 'amount' || field === 'medicationId') {
+      setTimeout(() => {
+        setMedicationLines(prev => {
+          const line = prev.find(l => l.id === id);
+          if (line && line.medicationId && line.lotId) {
+            const quantity = parseFloat(line.amount) || 0;
+            validateLot(id, line.medicationId, line.lotId, quantity);
+          }
+          return prev; // no mutation
+        });
+      }, 0);
+    }
+
+    // Load instructions when context and medication exist
+    if (field === 'medicationId' && value && detectedContext) {
+      setTimeout(() => loadInstructionsForContext(detectedContext), 100);
+    }
     if (field === 'amount' && detectedContext) {
       setTimeout(() => loadInstructionsForContext(detectedContext), 0);
     }
   };
 
-  // Handle manual context override for a medication line
-  const handleContextOverride = (lineId: string, context: ReasonContext) => {
-    setMedicationLines(prev => prev.map(line =>
-      line.id === lineId ? { ...line, contextOverride: context } : line
-    ));
-    if (detectedContext) {
-      loadInstructionsForContext(detectedContext);
+  /**
+   * Batch-update multiple fields on a medication line in a single state update.
+   * Prevents stale-closure when MedicationSelector sets medId + lotId + unit together.
+   */
+  const handleBatchMedicationChange = async (id: string, updates: Partial<Record<'medicationId' | 'lotId' | 'amount' | 'unit', string>>) => {
+    setMedicationLines(prev =>
+      prev.map(line => (line.id === id ? { ...line, ...updates } : line))
+    );
+
+    // Update selected medication name
+    if (updates.medicationId !== undefined) {
+      if (updates.medicationId) {
+        try {
+          const medication = await getMedicationById(updates.medicationId);
+          setSelectedMedicationName(medication?.name);
+        } catch {
+          setSelectedMedicationName(undefined);
+        }
+      } else {
+        setSelectedMedicationName(undefined);
+      }
+    }
+
+    // Trigger lot validation
+    if (updates.lotId || updates.amount || updates.medicationId) {
+      setTimeout(() => {
+        setMedicationLines(prev => {
+          const line = prev.find(l => l.id === id);
+          if (line && line.medicationId && line.lotId) {
+            const quantity = parseFloat(line.amount) || 0;
+            validateLot(id, line.medicationId, line.lotId, quantity);
+          }
+          return prev;
+        });
+      }, 0);
+    }
+
+    // Load instructions when context and medication exist
+    if (updates.medicationId && detectedContext) {
+      setTimeout(() => loadInstructionsForContext(detectedContext), 100);
     }
   };
 
-  const handleReasonsChange = (reasons: DispenseReason[]) => {
+  const handleReasonsChange = async (reasons: DispenseReason[]) => {
     setValue('reasons', reasons);
 
-    // Detect context from reasons
     const detectedContexts = reasons
       .map(reason => findReasonConfig(reason)?.context)
       .filter((ctx): ctx is ReasonContext => ctx !== undefined);
 
-    // Check for conflicting contexts (e.g., treatment + prevention)
     const uniqueContexts = Array.from(new Set(detectedContexts));
 
-    if (uniqueContexts.length > 1) {
-      // We have conflicting contexts
-      setConflictDetails({
-        contexts: uniqueContexts,
-        reasons,
-      });
-      setShowConflictModal(true);
-    } else if (uniqueContexts.length === 1) {
-      // Single context detected
-      setDetectedContext(uniqueContexts[0]);
+    if (uniqueContexts.length >= 1) {
+      const newContext = uniqueContexts[0];
+      setDetectedContext(newContext);
+      await loadInstructionsForContext(newContext);
     } else {
-      // No context detected
       setDetectedContext(null);
-    }
-
-    // Load instructions for medications when context is determined
-    if (detectedContexts.length === 1) {
-      loadInstructionsForContext(detectedContexts[0]);
     }
   };
 
@@ -181,81 +298,71 @@ export const EntryFormContainer: React.FC<EntryFormContainerProps> = ({ onSubmit
     const newInstructionDataMap = new Map<string, MedicationLine['instructionData']>();
 
     for (const line of medicationLines) {
-      if (line.medicationId && line.contextOverride) {
-        // Use manual override if present
-        const template = getInstructionTemplate(line.medicationId, line.contextOverride);
-        if (template) {
-          const quantity = parseFloat(line.amount) || 0;
-          newInstructionDataMap.set(line.id, {
-            context: template.context,
-            indication: template.indication,
-            shortDosing: template.shortDosing,
-            fullInstructions: template.fullInstructions,
-            warnings: template.warnings,
-            daySupply: calculateDaySupply(quantity, template.daySupplyMultiplier),
-            medicationStrength: template.strength,
-          });
+      if (!line.medicationId) continue;
+      try {
+        const medication = await getMedicationById(line.medicationId);
+        if (!medication) continue;
+        const useContext = line.contextOverride || context;
+
+        if (window.electron?.instruction?.getTemplateForMedication && useContext) {
+          const templateRaw = await window.electron.instruction.getTemplateForMedication(
+            medication.name,
+            useContext
+          );
+          const template = templateRaw as InstructionTemplate | null;
+          if (template) {
+            const fullInstructions = typeof template.fullInstructions === 'string'
+              ? JSON.parse(template.fullInstructions)
+              : Array.isArray(template.fullInstructions)
+              ? template.fullInstructions
+              : [];
+            const warnings = typeof template.warnings === 'string'
+              ? JSON.parse(template.warnings)
+              : Array.isArray(template.warnings)
+              ? template.warnings
+              : [];
+            const quantity = parseFloat(line.amount) || 0;
+            const daySupplyMultiplier = parseDaySupplyMultiplier(template.daySupplyCalculation || '');
+            const daySupply = quantity > 0 && daySupplyMultiplier > 0
+              ? Math.round(quantity / daySupplyMultiplier)
+              : 0;
+
+            newInstructionDataMap.set(line.id, {
+              context: template.context,
+              indication: template.indication,
+              shortDosing: template.shortDosing,
+              fullInstructions,
+              warnings,
+              daySupply,
+              medicationStrength: template.strength || undefined,
+            });
+          }
         }
-      } else if (line.medicationId) {
-        // Use detected context
-        const normalizedMedId = normalizeMedicationId(line.medicationId);
-        const template = getInstructionTemplate(normalizedMedId, context);
-        if (template) {
-          const quantity = parseFloat(line.amount) || 0;
-          newInstructionDataMap.set(line.id, {
-            context: template.context,
-            indication: template.indication,
-            shortDosing: template.shortDosing,
-            fullInstructions: template.fullInstructions,
-            warnings: template.warnings,
-            daySupply: calculateDaySupply(quantity, template.daySupplyMultiplier),
-            medicationStrength: template.strength,
-          });
-        }
+      } catch (error) {
+        console.error(`Failed to load instructions for medication ${line.medicationId}:`, error);
       }
     }
-
     setInstructionDataMap(newInstructionDataMap);
-  }, [medicationLines]);
+  }, [medicationLines, getMedicationById]);
 
-  // Calculate day supply based on quantity and multiplier
-  const calculateDaySupply = (quantity: number, multiplier: number): number => {
-    if (quantity <= 0 || multiplier <= 0) return 0;
-    return Math.round(quantity / multiplier) * multiplier >= quantity
-      ? Math.round(quantity / multiplier)
-      : Math.round(quantity / multiplier) + 1;
+  const parseDaySupplyMultiplier = (calculation: string): number => {
+    if (!calculation) return 1;
+    const match = calculation.match(/(\d+(?:\.\d+)?)\s*(?:tablet|cap|pill|dose|unit).*?(?:per|\/)\s*day/i);
+    if (match) return parseFloat(match[1]);
+    const numMatch = calculation.match(/(\d+(?:\.\d+)?)/);
+    return numMatch ? parseFloat(numMatch[1]) : 1;
   };
 
-  // Validate lot when medication and lot are selected
   const validateLot = useCallback(async (lineId: string, medicationId: string, lotId: string, quantity: number) => {
     if (!lotId || !medicationId) {
-      setLotValidationResults(prev => {
-        const newMap = new Map(prev);
-        newMap.delete(lineId);
-        return newMap;
-      });
+      setLotValidationResults(prev => { const m = new Map(prev); m.delete(lineId); return m; });
       return;
     }
-
     const validationResult = validateLotForDispensing(lotId, quantity);
     setLotValidationResults(prev => new Map(prev).set(lineId, validationResult));
   }, [validateLotForDispensing]);
 
-  // Context resolution handler for conflicts
-  const handleContextResolution = (selectedContext: ReasonContext) => {
-    setDetectedContext(selectedContext);
-    setShowConflictModal(false);
-    loadInstructionsForContext(selectedContext);
-  };
-
-  // Load instructions when context changes or medication lines change
-  useEffect(() => {
-    if (detectedContext && medicationLines.length > 0) {
-      loadInstructionsForContext(detectedContext);
-    }
-  }, [detectedContext, medicationLines.length]); // Only re-run when these specific values change
-
-  // Validate lots when medication/lot selection changes
+  // Re-validate lots on change
   useEffect(() => {
     medicationLines.forEach(line => {
       if (line.medicationId && line.lotId) {
@@ -265,41 +372,39 @@ export const EntryFormContainer: React.FC<EntryFormContainerProps> = ({ onSubmit
     });
   }, [medicationLines.map(l => `${l.medicationId}-${l.lotId}-${l.amount}`).join(','), validateLot]);
 
-  const handleSave = async (shouldPrint: boolean = false) => {
+  // Load instructions when context or lines change
+  useEffect(() => {
+    if (detectedContext && medicationLines.length > 0) {
+      loadInstructionsForContext(detectedContext);
+    }
+  }, [detectedContext, medicationLines.length]);
+
+  // ---------------------------------------------------------------------------
+  // Submit flow
+  // ---------------------------------------------------------------------------
+
+  const handleSave = async () => {
     if (!selectedPatient || !staff) return;
 
-    // Validate medication lines are complete
-    const incompleteLine = medicationLines.find(line =>
-      !line.medicationId || !line.lotId || !line.amount || parseFloat(line.amount) <= 0
+    const incompleteLine = medicationLines.find(
+      line => !line.medicationId || !line.lotId || !line.amount || parseFloat(line.amount) <= 0
     );
-
     if (incompleteLine) {
       alert('Please complete all medication entries');
       return;
     }
 
-    // Validate all lots before proceeding
-    const lotValidationErrors: string[] = [];
+    // Validate lots
+    const lotErrors: string[] = [];
     for (const line of medicationLines) {
-      const validation = lotValidationResults.get(line.id);
-      if (!validation || !validation.valid) {
-        lotValidationErrors.push(
-          validation?.errors.join(', ') || `Lot validation failed for medication`
-        );
+      const v = lotValidationResults.get(line.id);
+      if (!v || !v.valid) {
+        lotErrors.push(v?.errors.join(', ') || 'Lot validation failed');
       }
     }
-
-    if (lotValidationErrors.length > 0) {
-      alert(`Cannot dispense due to lot validation errors:\n\n${lotValidationErrors.join('\n')}`);
+    if (lotErrors.length > 0) {
+      alert(`Cannot dispense:\n\n${lotErrors.join('\n')}`);
       return;
-    }
-
-    // Check for expired lots
-    for (const [lineId, validation] of lotValidationResults.entries()) {
-      if (validation.errors.some(err => err.includes('expired'))) {
-        alert('Cannot dispense expired medications. Please select a different lot.');
-        return;
-      }
     }
 
     setShowPinEntry(true);
@@ -307,18 +412,15 @@ export const EntryFormContainer: React.FC<EntryFormContainerProps> = ({ onSubmit
 
   const handlePinVerified = async () => {
     if (!selectedPatient || !staff) return;
-
     setIsSubmitting(true);
     setShowPinEntry(false);
 
     try {
-      // Fetch medication details for each line
       const dispensedMedications: DispensedMedication[] = [];
-
       for (const line of medicationLines) {
         const medication = await getMedicationById(line.medicationId);
         const lotInfo = lotValidationResults.get(line.id)?.lot;
-        const instructionData = instructionDataMap.get(line.id);
+        const instrData = instructionDataMap.get(line.id);
 
         dispensedMedications.push({
           id: Math.random().toString(36).substr(2, 9),
@@ -329,17 +431,16 @@ export const EntryFormContainer: React.FC<EntryFormContainerProps> = ({ onSubmit
           amount: parseFloat(line.amount),
           unit: line.unit,
           expirationDate: lotInfo?.expirationDate || new Date(),
-          // Enhanced fields
-          instructionContext: instructionData ? {
-            context: instructionData.context,
-            indication: instructionData.indication,
+          instructionContext: instrData ? {
+            context: instrData.context,
+            indication: instrData.indication,
             medicationId: line.medicationId,
             priority: 1,
           } : undefined,
-          daySupply: instructionData?.daySupply,
-          medicationStrength: instructionData?.medicationStrength,
-          warnings: instructionData?.warnings,
-          instructions: instructionData?.fullInstructions,
+          daySupply: instrData?.daySupply,
+          medicationStrength: instrData?.medicationStrength,
+          warnings: instrData?.warnings,
+          instructions: instrData?.fullInstructions,
         });
       }
 
@@ -357,16 +458,11 @@ export const EntryFormContainer: React.FC<EntryFormContainerProps> = ({ onSubmit
       };
 
       await saveDispenseRecord(record);
-
-      // Deduct from inventory
       for (const line of medicationLines) {
         await dispenseMedication(line.medicationId, line.lotId, parseFloat(line.amount));
       }
 
-      // Show print dialog after successful save
       setShowPrintDialog(true);
-
-      // Don't reset form yet - wait for print dialog
       setIsSubmitting(false);
     } catch (error) {
       console.error('Failed to save record:', error);
@@ -377,210 +473,392 @@ export const EntryFormContainer: React.FC<EntryFormContainerProps> = ({ onSubmit
 
   const handlePrintConfirm = async (options: PrintDialogOptions) => {
     if (!selectedPatient || !staff) return;
-
     try {
       const rxNumber = `RX${Date.now().toString().slice(-8)}`;
-      const dispenseDate = new Date().toLocaleDateString();
 
-      // Generate label data with instruction information
       if (options.printLabels && window.electron?.print?.label) {
         for (const line of medicationLines) {
-          const instructionData = instructionDataMap.get(line.id);
-          const lotValidation = lotValidationResults.get(line.id);
+          const instrData = instructionDataMap.get(line.id);
+          const lotVal = lotValidationResults.get(line.id);
           const medication = await getMedicationById(line.medicationId);
-
-          const labelData = {
-            patientName: `${selectedPatient.firstName} ${selectedPatient.lastName}`,
-            patientChartNumber: selectedPatient.chartNumber,
-            medicationName: medication?.name || line.medicationId,
-            medicationStrength: instructionData?.medicationStrength || medication?.strength || '',
-            quantity: parseFloat(line.amount),
-            unit: line.unit,
-            daySupply: instructionData?.daySupply || 30,
-            directions: instructionData?.shortDosing || 'Take as directed',
-            indication: instructionData?.indication || 'As prescribed',
-            prescribedBy: 'Dr. Provider',
-            dispenseDate,
-            rxNumber,
-            warnings: instructionData?.warnings || ['Take as directed'],
-            lotNumber: lotValidation?.lot?.lotNumber || line.lotId,
-            lotExpiration: lotValidation?.lot?.expirationDate?.toLocaleDateString(),
-            context: instructionData?.context,
-          };
-
-          await window.electron.print.label(labelData, {
-            labelFormat: options.labelFormat,
-            copies: options.copies,
-            preview: options.preview,
-            printerName: options.printerName,
-          });
+          await window.electron.print.label(
+            {
+              patientName: `${selectedPatient.firstName} ${selectedPatient.lastName}`,
+              patientChartNumber: selectedPatient.chartNumber,
+              medicationName: medication?.name || line.medicationId,
+              medicationStrength: instrData?.medicationStrength || medication?.strength || '',
+              quantity: parseFloat(line.amount),
+              unit: line.unit,
+              daySupply: instrData?.daySupply || 30,
+              directions: instrData?.shortDosing || 'Take as directed',
+              indication: instrData?.indication || 'As prescribed',
+              prescribedBy: 'Dr. Provider',
+              dispenseDate: new Date().toLocaleDateString(),
+              rxNumber,
+              warnings: instrData?.warnings || ['Take as directed'],
+              lotNumber: lotVal?.lot?.lotNumber || line.lotId,
+              lotExpiration: lotVal?.lot?.expirationDate?.toLocaleDateString(),
+              context: instrData?.context,
+            },
+            {
+              labelFormat: options.labelFormat,
+              copies: options.copies,
+              preview: options.preview,
+              printerName: options.printerName,
+            }
+          );
         }
       }
 
-      // Generate receipt with full instruction data
       if (options.printReceipt && window.electron?.print?.receipt) {
-        const receiptData = {
-          receiptNumber: rxNumber,
-          patientName: `${selectedPatient.firstName} ${selectedPatient.lastName}`,
-          patientChartNumber: selectedPatient.chartNumber,
-          patientDob: selectedPatient.dateOfBirth.toLocaleDateString(),
-          medications: medicationLines.map(line => {
-            const instructionData = instructionDataMap.get(line.id);
-            const lotValidation = lotValidationResults.get(line.id);
-            const medication = getMedicationById(line.medicationId);
-
-            return {
-              name: medication?.name || line.medicationId,
-              strength: instructionData?.medicationStrength || medication?.strength || '',
-              quantity: parseFloat(line.amount),
-              unit: line.unit,
-              lotNumber: lotValidation?.lot?.lotNumber || line.lotId,
-              directions: instructionData?.shortDosing || 'Take as directed',
-              fullInstructions: instructionData?.fullInstructions || [],
-              warnings: instructionData?.warnings || [],
-              daySupply: instructionData?.daySupply,
-              indication: instructionData?.indication,
-              context: instructionData?.context,
-            };
-          }),
-          dispensedBy: staff.name,
-          dispensedAt: new Date(),
-          clinicName: 'Hyacinth Health & Wellness Clinic',
-          clinicPhone: '(862) 240-1461',
-          notes: values.notes,
-          reasons: values.reasons,
-        };
-
-        await window.electron.print.receipt(receiptData, {
-          copies: options.copies,
-          preview: options.preview,
-          printerName: options.printerName,
-        });
+        await window.electron.print.receipt(
+          {
+            receiptNumber: rxNumber,
+            patientName: `${selectedPatient.firstName} ${selectedPatient.lastName}`,
+            patientChartNumber: selectedPatient.chartNumber,
+            patientDob: selectedPatient.dateOfBirth.toLocaleDateString(),
+            medications: medicationLines.map(line => {
+              const instrData = instructionDataMap.get(line.id);
+              const lotVal = lotValidationResults.get(line.id);
+              return {
+                name: line.medicationId,
+                strength: instrData?.medicationStrength || '',
+                quantity: parseFloat(line.amount),
+                unit: line.unit,
+                lotNumber: lotVal?.lot?.lotNumber || line.lotId,
+                directions: instrData?.shortDosing || 'Take as directed',
+                fullInstructions: instrData?.fullInstructions || [],
+                warnings: instrData?.warnings || [],
+                daySupply: instrData?.daySupply,
+                indication: instrData?.indication,
+                context: instrData?.context,
+              };
+            }),
+            dispensedBy: staff.name,
+            dispensedAt: new Date(),
+            clinicName: 'Hyacinth Health & Wellness Clinic',
+            clinicPhone: '(862) 240-1461',
+            notes: values.notes,
+            reasons: values.reasons,
+          },
+          { copies: options.copies, preview: options.preview, printerName: options.printerName }
+        );
       }
 
-      // Reset form after printing
-      setSelectedPatient(null);
-      setMedicationLines([]);
-      setInstructionDataMap(new Map());
-      setLotValidationResults(new Map());
-      setDetectedContext(null);
-      resetForm();
+      // Reset everything
+      handleFullReset();
       setShowPrintDialog(false);
-
       onSubmitSuccess?.();
     } catch (error) {
       console.error('Print failed:', error);
-      alert('Some print jobs may have failed. Please check the print queue.');
+      alert('Some print jobs may have failed. Check the print queue.');
     }
+  };
+
+  const handleFullReset = () => {
+    setSelectedPatient(null);
+    setMedicationLines([]);
+    setInstructionDataMap(new Map());
+    setLotValidationResults(new Map());
+    setDetectedContext(null);
+    setSelectedMedicationName(undefined);
+    setCurrentStep('patient');
+    resetForm();
   };
 
   const handleReset = () => {
-    if (confirm('Are you sure you want to clear the form?')) {
-      setSelectedPatient(null);
-      setMedicationLines([]);
-      setInstructionDataMap(new Map());
-      setLotValidationResults(new Map());
-      setDetectedContext(null);
-      setShowConflictModal(false);
-      setConflictDetails(null);
-      resetForm();
+    if (confirm('Clear the entire form and start over?')) {
+      handleFullReset();
     }
   };
 
+  // ---------------------------------------------------------------------------
+  // Render helpers
+  // ---------------------------------------------------------------------------
+
+  const renderStepIndicator = () => (
+    <div className="flex items-center justify-between mb-6">
+      {STEPS.map((step, idx) => {
+        const isActive = step.key === currentStep;
+        const isCompleted = idx < stepIndex;
+        return (
+          <React.Fragment key={step.key}>
+            {idx > 0 && (
+              <div className={`flex-1 h-px mx-2 ${isCompleted ? 'bg-blue-500' : 'bg-gray-200'}`} />
+            )}
+            <button
+              type="button"
+              onClick={() => {
+                // Allow clicking completed steps to go back
+                if (idx <= stepIndex) setCurrentStep(step.key);
+              }}
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
+                isActive
+                  ? 'bg-blue-600 text-white'
+                  : isCompleted
+                  ? 'bg-blue-100 text-blue-700 hover:bg-blue-200'
+                  : 'bg-gray-100 text-gray-400'
+              }`}
+              disabled={idx > stepIndex}
+            >
+              {isCompleted ? <Check className="h-3.5 w-3.5" /> : step.icon}
+              <span className="hidden sm:inline">{step.label}</span>
+            </button>
+          </React.Fragment>
+        );
+      })}
+    </div>
+  );
+
+  const renderPatientStep = () => (
+    <section>
+      <h3 className="text-sm font-medium text-gray-700 mb-3">Search or scan a patient</h3>
+      <PatientLookup
+        selectedPatient={selectedPatient}
+        onSelect={handlePatientSelect}
+        enableBarcodeScan={true}
+        onViewHistory={onViewPatientHistory}
+        showLastDispensed={true}
+      />
+    </section>
+  );
+
+  const renderMedicationsStep = () => (
+    <section>
+      <div className="flex justify-between items-center mb-3">
+        <h3 className="text-sm font-medium text-gray-700">Add medications to dispense</h3>
+        <button
+          type="button"
+          onClick={handleAddMedication}
+          className="text-sm text-blue-600 hover:text-blue-700 font-medium"
+        >
+          + Add Medication
+        </button>
+      </div>
+
+      <div className="space-y-2">
+        {medicationLines.map((line, index) => (
+          <MedicationLineItem
+            key={line.id}
+            index={index}
+            line={line}
+            onChange={(field, value) => handleMedicationChange(line.id, field, value)}
+            onBatchChange={(updates) => handleBatchMedicationChange(line.id, updates)}
+            onRemove={() => handleRemoveMedication(line.id)}
+            lotValidation={lotValidationResults.get(line.id)}
+            detectedContext={detectedContext}
+            selectedReasons={values.reasons}
+          />
+        ))}
+        {medicationLines.length === 0 && (
+          <div className="text-center py-8 bg-gray-50 rounded-lg border-2 border-dashed border-gray-200">
+            <p className="text-gray-400 text-sm">No medications added yet</p>
+            <button
+              type="button"
+              onClick={handleAddMedication}
+              className="text-blue-600 hover:text-blue-700 font-medium text-sm mt-1"
+            >
+              Add your first medication
+            </button>
+          </div>
+        )}
+      </div>
+    </section>
+  );
+
+  const renderReasonStep = () => (
+    <section className="space-y-4">
+      <div>
+        <h3 className="text-sm font-medium text-gray-700 mb-2">Dispensing Reason</h3>
+        <ReasonSelector
+          selectedReasons={values.reasons}
+          onChange={handleReasonsChange}
+          selectedMedicationName={selectedMedicationName}
+        />
+      </div>
+
+      <div>
+        <h3 className="text-sm font-medium text-gray-700 mb-2">Notes (optional)</h3>
+        <textarea
+          value={values.notes}
+          onChange={(e) => setValue('notes', e.target.value)}
+          placeholder="Additional notes about this dispensing..."
+          rows={2}
+          className="w-full rounded-lg border border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm px-3 py-2"
+        />
+      </div>
+    </section>
+  );
+
+  const renderReviewStep = () => (
+    <section className="space-y-4">
+      <h3 className="text-sm font-medium text-gray-700 mb-2">Review before submitting</h3>
+
+      {/* Patient summary */}
+      {selectedPatient && (
+        <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
+          <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Patient</p>
+          <p className="font-medium text-gray-900">
+            {selectedPatient.firstName} {selectedPatient.lastName}
+          </p>
+          <p className="text-sm text-gray-600">
+            Chart: {selectedPatient.chartNumber}
+          </p>
+        </div>
+      )}
+
+      {/* Medications summary */}
+      <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
+        <p className="text-xs text-gray-500 uppercase tracking-wide mb-2">
+          Medications ({medicationLines.length})
+        </p>
+        {medicationLines.map((line) => {
+          const instrData = instructionDataMap.get(line.id);
+          const lotVal = lotValidationResults.get(line.id);
+          return (
+            <div key={line.id} className="flex items-center justify-between py-1.5 border-b border-gray-100 last:border-0">
+              <div>
+                <span className="font-medium text-gray-900 text-sm">
+                  {instrData?.medicationStrength
+                    ? `${line.medicationId} (${instrData.medicationStrength})`
+                    : line.medicationId}
+                </span>
+                {lotVal?.lot?.lotNumber && (
+                  <span className="text-xs text-gray-500 ml-2">
+                    Lot: {lotVal.lot.lotNumber}
+                  </span>
+                )}
+              </div>
+              <span className="text-sm text-gray-700">
+                {line.amount} {line.unit}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Reasons summary */}
+      <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
+        <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Reason(s)</p>
+        <p className="text-sm text-gray-900">{values.reasons.join(', ')}</p>
+      </div>
+
+      {/* Notes summary */}
+      {values.notes && (
+        <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
+          <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Notes</p>
+          <p className="text-sm text-gray-900">{values.notes}</p>
+        </div>
+      )}
+
+      {/* Instruction preview (if available) */}
+      {Array.from(instructionDataMap.entries()).some(([, d]) => d) && (
+        <details className="bg-blue-50 rounded-lg border border-blue-200">
+          <summary className="px-3 py-2 text-sm font-medium text-blue-800 cursor-pointer">
+            View dispensing instructions
+          </summary>
+          <div className="px-3 pb-3 space-y-2">
+            {Array.from(instructionDataMap.entries()).map(([lineId, data]) => {
+              if (!data) return null;
+              return (
+                <div key={lineId} className="text-sm text-blue-700">
+                  <p className="font-medium">{data.indication}</p>
+                  <p>{data.shortDosing}</p>
+                  {data.warnings.length > 0 && (
+                    <ul className="mt-1 space-y-0.5">
+                      {data.warnings.map((w, i) => (
+                        <li key={i} className="text-xs text-amber-700 flex items-center gap-1">
+                          <AlertTriangle className="h-3 w-3 flex-shrink-0" />
+                          {w}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </details>
+      )}
+    </section>
+  );
+
+  // ---------------------------------------------------------------------------
+  // Main render
+  // ---------------------------------------------------------------------------
+
   return (
-    <div className="max-w-4xl mx-auto p-6">
+    <div className="max-w-3xl mx-auto p-6">
       <div className="bg-white rounded-xl shadow-sm border border-gray-200">
-        <div className="p-6 border-b border-gray-200">
-          <h2 className="text-xl font-semibold text-gray-900">New Dispensing Entry</h2>
-          <p className="text-sm text-gray-500 mt-1">Record medication dispensing for a patient</p>
+        {/* Header */}
+        <div className="p-5 border-b border-gray-200">
+          <h2 className="text-lg font-semibold text-gray-900">New Dispensing Entry</h2>
         </div>
 
-        <div className="p-6 space-y-6">
-          {/* Patient Lookup */}
-          <section>
-            <h3 className="text-sm font-medium text-gray-700 mb-3">Patient Information</h3>
-            <PatientLookup
-              selectedPatient={selectedPatient}
-              onSelect={handlePatientSelect}
-              enableBarcodeScan={true}
-              onViewHistory={onViewPatientHistory}
-              showLastDispensed={true}
-            />
-          </section>
+        {/* Step indicator */}
+        <div className="px-5 pt-5">
+          {renderStepIndicator()}
+        </div>
 
-          {/* Medication Lines */}
-          <section>
-            <div className="flex justify-between items-center mb-3">
-              <h3 className="text-sm font-medium text-gray-700">Medications</h3>
+        {/* Step content */}
+        <div className="px-5 pb-5">
+          {currentStep === 'patient' && renderPatientStep()}
+          {currentStep === 'medications' && renderMedicationsStep()}
+          {currentStep === 'reason' && renderReasonStep()}
+          {currentStep === 'review' && renderReviewStep()}
+        </div>
+
+        {/* Navigation footer */}
+        <div className="px-5 py-4 border-t border-gray-200 bg-gray-50 rounded-b-xl flex items-center justify-between">
+          <div>
+            {stepIndex > 0 && (
               <button
                 type="button"
-                onClick={handleAddMedication}
-                className="text-sm text-blue-600 hover:text-blue-700 font-medium"
+                onClick={goBack}
+                className="flex items-center gap-1 text-sm text-gray-600 hover:text-gray-800"
               >
-                + Add Medication
+                <ChevronLeft className="h-4 w-4" />
+                Back
               </button>
-            </div>
+            )}
+          </div>
 
-            <div className="space-y-3">
-              {medicationLines.map((line, index) => (
-                <MedicationLineItem
-                  key={line.id}
-                  index={index}
-                  line={line}
-                  onChange={(field, value) => handleMedicationChange(line.id, field, value)}
-                  onRemove={() => handleRemoveMedication(line.id)}
-                  instructionData={instructionDataMap.get(line.id)}
-                  lotValidation={lotValidationResults.get(line.id)}
-                  detectedContext={detectedContext}
-                  onContextOverride={(ctx) => handleContextOverride(line.id, ctx)}
-                />
-              ))}
-              {medicationLines.length === 0 && (
-                <div className="text-center py-8 bg-gray-50 rounded-lg border-2 border-dashed border-gray-300">
-                  <p className="text-gray-500">No medications added yet</p>
-                  <button
-                    type="button"
-                    onClick={handleAddMedication}
-                    className="text-blue-600 hover:text-blue-700 font-medium mt-1"
-                  >
-                    Add your first medication
-                  </button>
-                </div>
-              )}
-            </div>
-          </section>
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={handleReset}
+              className="text-sm text-gray-500 hover:text-gray-700"
+            >
+              Reset
+            </button>
 
-          {/* Reasons */}
-          <section>
-            <h3 className="text-sm font-medium text-gray-700 mb-3">Dispensing Reason</h3>
-            <ReasonSelector
-              selectedReasons={values.reasons}
-              onChange={handleReasonsChange}
-            />
-          </section>
-
-          {/* Notes */}
-          <section>
-            <h3 className="text-sm font-medium text-gray-700 mb-3">Notes</h3>
-            <textarea
-              value={values.notes}
-              onChange={(e) => setValue('notes', e.target.value)}
-              placeholder="Add any additional notes about this dispensing..."
-              rows={3}
-              className="w-full rounded-lg border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm border px-3 py-2"
-            />
-          </section>
-        </div>
-
-        {/* Form Actions */}
-        <div className="p-6 border-t border-gray-200 bg-gray-50 rounded-b-xl">
-          <FormActions
-            onSaveAndPrint={() => handleSave(true)}
-            onSaveOnly={() => handleSave(false)}
-            onReset={handleReset}
-            isLoading={isSubmitting}
-            isValid={selectedPatient !== null && medicationLines.length > 0 && values.reasons.length > 0}
-          />
+            {currentStep !== 'review' ? (
+              <button
+                type="button"
+                onClick={goNext}
+                disabled={!canGoNext()}
+                className={`flex items-center gap-1 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  canGoNext()
+                    ? 'bg-blue-600 text-white hover:bg-blue-700'
+                    : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                }`}
+              >
+                Continue
+                <ChevronRight className="h-4 w-4" />
+              </button>
+            ) : (
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={handleSave}
+                  disabled={isSubmitting}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 transition-colors"
+                >
+                  {isSubmitting ? 'Saving...' : 'Save & Print'}
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -598,93 +876,33 @@ export const EntryFormContainer: React.FC<EntryFormContainerProps> = ({ onSubmit
           isOpen={showPrintDialog}
           onClose={() => {
             setShowPrintDialog(false);
-            // Reset form even if they close without printing
-            setSelectedPatient(null);
-            setMedicationLines([]);
-            resetForm();
+            handleFullReset();
             onSubmitSuccess?.();
           }}
           onConfirm={handlePrintConfirm}
           patientName={`${selectedPatient.firstName} ${selectedPatient.lastName}`}
           chartNumber={selectedPatient.chartNumber}
           medications={medicationLines.map(line => {
-            const instructionData = instructionDataMap.get(line.id);
+            const instrData = instructionDataMap.get(line.id);
+            const lotVal = lotValidationResults.get(line.id);
             return {
-              name: instructionData?.medicationStrength ? `${line.medicationId} (${instructionData.medicationStrength})` : line.medicationId,
-              strength: instructionData?.medicationStrength || '',
+              id: line.id,
+              name: line.medicationId,
+              strength: instrData?.medicationStrength || '',
               quantity: parseFloat(line.amount),
               unit: line.unit,
-              lotNumber: line.lotId,
-              directions: instructionData?.shortDosing || 'Take as directed',
-              warnings: instructionData?.warnings || [],
-              daySupply: instructionData?.daySupply,
+              lotNumber: lotVal?.lot?.lotNumber || line.lotId,
+              expirationDate: lotVal?.lot?.expirationDate?.toLocaleDateString(),
+              directions: instrData?.shortDosing || 'Take as directed',
+              fullInstructions: instrData?.fullInstructions || [],
+              warnings: instrData?.warnings || [],
+              context: detectedContext || instrData?.context,
+              indication: instrData?.indication,
+              daySupply: instrData?.daySupply,
+              prescribedBy: staff?.name || 'Dr. Provider',
             };
           })}
         />
-      )}
-
-      {/* Context Conflict Modal */}
-      {showConflictModal && conflictDetails && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-xl max-w-lg w-full mx-4 p-6">
-            <div className="flex items-start gap-3">
-              <AlertTriangle className="h-6 w-6 text-amber-500 flex-shrink-0 mt-0.5" />
-              <div className="flex-1">
-                <h3 className="text-lg font-semibold text-gray-900">
-                  Conflicting Dispense Contexts Detected
-                </h3>
-                <p className="text-sm text-gray-600 mt-2">
-                  You have selected reasons that indicate different treatment contexts. This may affect the instructions that are displayed.
-                </p>
-                <div className="mt-4 p-3 bg-amber-50 rounded-lg">
-                  <p className="text-sm font-medium text-amber-800">Detected Contexts:</p>
-                  <ul className="mt-2 space-y-1">
-                    {conflictDetails.contexts.map(ctx => (
-                      <li key={ctx} className="text-sm text-amber-700">
-                        • {ctx === 'treatment' && 'Treatment - for existing infections'}
-                        {ctx === 'prevention' && 'Prevention - for STI prevention'}
-                        {ctx === 'prophylaxis' && 'Prophylaxis - for infection prevention'}
-                        {ctx === 'pep' && 'PEP - Post-Exposure Prophylaxis'}
-                        {ctx === 'prep' && 'PrEP - Pre-Exposure Prophylaxis'}
-                        {ctx === 'other' && 'Other - general dispensing'}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-                <p className="text-sm text-gray-600 mt-4">
-                  Please select the primary context to use for instruction templates:
-                </p>
-                <div className="mt-3 grid grid-cols-2 gap-2">
-                  {conflictDetails.contexts.map(ctx => (
-                    <button
-                      key={ctx}
-                      onClick={() => handleContextResolution(ctx)}
-                      className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-sm font-medium text-gray-700 hover:text-gray-900 transition-colors"
-                    >
-                      {ctx === 'treatment' && 'Treatment'}
-                      {ctx === 'prevention' && 'Prevention'}
-                      {ctx === 'prophylaxis' && 'Prophylaxis'}
-                      {ctx === 'pep' && 'PEP'}
-                      {ctx === 'prep' && 'PrEP'}
-                      {ctx === 'other' && 'Other'}
-                    </button>
-                  ))}
-                </div>
-                <div className="mt-4 flex justify-end">
-                  <button
-                    onClick={() => {
-                      setShowConflictModal(false);
-                      setConflictDetails(null);
-                    }}
-                    className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
       )}
     </div>
   );

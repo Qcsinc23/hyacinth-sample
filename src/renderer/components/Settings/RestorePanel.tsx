@@ -20,7 +20,7 @@ interface BackupInfo {
   path: string;
   size: number;
   createdAt: string;
-  checksum: string;
+  checksum: string | null;
   verified: boolean;
   type: 'automatic' | 'manual';
 }
@@ -53,15 +53,19 @@ export const RestorePanel: React.FC<RestorePanelProps> = ({ className = '' }) =>
   const loadBackups = useCallback(async () => {
     setIsLoading(true);
     setError(null);
-    
+
     try {
       const result = await window.electron.backup?.list?.();
-      if (result) {
+      if (Array.isArray(result)) {
         setBackups(result);
+      } else {
+        console.warn('Unexpected backup list response:', result);
+        setBackups([]);
       }
     } catch (err) {
       console.error('Failed to load backups:', err);
       setError('Failed to load backup list');
+      setBackups([]);
     } finally {
       setIsLoading(false);
     }
@@ -146,7 +150,7 @@ export const RestorePanel: React.FC<RestorePanelProps> = ({ className = '' }) =>
         }, 500);
       } else {
         setCurrentStep('error');
-        setError(result?.error || 'Restore failed');
+        setError('Restore failed');
       }
     } catch (err) {
       setCurrentStep('error');
@@ -178,7 +182,7 @@ export const RestorePanel: React.FC<RestorePanelProps> = ({ className = '' }) =>
   const handleImportBackup = useCallback(async () => {
     try {
       const result = await window.electron.backup?.import?.();
-      if (result?.success) {
+      if (result?.imported) {
         loadBackups();
       }
     } catch (err) {

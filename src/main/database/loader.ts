@@ -7,6 +7,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { getDatabase } from './db';
 import { runMigrations, getCurrentVersion } from './migrations';
+import { hashPin } from './queries/staff';
 
 /**
  * Read and execute SQL file
@@ -41,8 +42,26 @@ export function loadMedicationCatalogSeed(): void {
  * Load seed data for inventory (sample lots for new medications)
  */
 export function loadInventorySeed(): void {
-  const seedPath = path.join(__dirname, 'seeds', 'inventorySeed.sql');
-  executeSqlFile(seedPath);
+  console.log('[Loader] Loading inventory seed...');
+  try {
+    // Try to use embedded SQL first (more reliable in bundled apps)
+    const { inventorySeedSQL } = require('./seeds/inventorySeed');
+    const db = getDatabase();
+    db.exec(inventorySeedSQL);
+    console.log('[Loader] ✓ Executed inventory seed from embedded SQL');
+  } catch (error) {
+    console.error('[Loader] Error loading inventory seed:', error);
+    // Fallback to file-based loading
+    const seedPath = path.join(__dirname, 'seeds', 'inventorySeed.sql');
+    console.log('[Loader] Seed path:', seedPath);
+    console.log('[Loader] File exists:', fs.existsSync(seedPath));
+    if (fs.existsSync(seedPath)) {
+      executeSqlFile(seedPath);
+    } else {
+      console.error('[Loader] No inventory seed source available');
+      throw error;
+    }
+  }
 }
 
 /**
@@ -82,9 +101,48 @@ export function isInventorySeeded(): boolean {
       `SELECT COUNT(*) as count FROM inventory WHERE medication_name IN (${placeholders})`
     ).get(...newMedications) as { count: number };
 
+    console.log(`[Loader] Inventory seeded: ${row.count} items found`);
     return row.count > 0;
-  } catch {
+  } catch (error) {
+    console.error('[Loader] Error checking inventory seed:', error);
     return false;
+  }
+}
+
+/**
+ * Get inventory count for debugging
+ */
+export function getInventoryCount(): number {
+  const db = getDatabase();
+  try {
+    const row = db.prepare('SELECT COUNT(*) as count FROM inventory').get() as { count: number };
+    return row.count;
+  } catch {
+    return 0;
+  }
+}
+
+/**
+ * Ensure at least one admin staff member exists.
+ * On first run (fresh database), creates a default admin with PIN 1234
+ * so the app is usable immediately. The admin should change this PIN after first login.
+ */
+function ensureDefaultAdmin(): void {
+  const db = getDatabase();
+
+  const adminCount = db.prepare(
+    'SELECT COUNT(*) as count FROM staff_members WHERE role = ? AND is_active = 1'
+  ).get('admin') as { count: number };
+
+  if (adminCount.count === 0) {
+    const now = new Date().toISOString();
+    const pinHash = hashPin('1234');
+    db.prepare(`
+      INSERT INTO staff_members (
+        first_name, last_name, pin_hash, role, is_active, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, 1, ?, ?)
+    `).run('System', 'Administrator', pinHash, 'admin', now, now);
+    console.log('[Loader] Created default admin (PIN: 1234). Change this after first login.');
   }
 }
 
@@ -96,6 +154,9 @@ export function initializeDatabase(): void {
 
   // Run migrations
   runMigrations();
+
+  // Ensure at least one admin exists (required for login)
+  ensureDefaultAdmin();
 
   // Load seed data if needed
   const currentVersion = getCurrentVersion();

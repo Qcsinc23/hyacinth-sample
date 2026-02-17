@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Filter, Download, Eye, XCircle, Calendar, FileText } from 'lucide-react';
+import { Search, Download, Eye, XCircle, FileText } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 
 interface User {
@@ -62,6 +62,9 @@ export const DispensingLog: React.FC<DispensingLogProps> = ({ user }) => {
       if (startDate) filters.startDate = startDate;
       if (endDate) filters.endDate = endDate;
       
+      if (!window.electron?.dispensing?.getAll) {
+        throw new Error('Dispensing API is not available');
+      }
       const result = await window.electron.dispensing.getAll(filters);
       setRecords(result as DispensingRecord[]);
     } catch (err) {
@@ -73,6 +76,9 @@ export const DispensingLog: React.FC<DispensingLogProps> = ({ user }) => {
 
   const viewRecord = async (id: number) => {
     try {
+      if (!window.electron?.dispensing?.getById) {
+        throw new Error('Dispensing API is not available');
+      }
       const record = await window.electron.dispensing.getById(id);
       setSelectedRecord(record as DispensingRecordDetail);
       setShowDetailModal(true);
@@ -85,9 +91,13 @@ export const DispensingLog: React.FC<DispensingLogProps> = ({ user }) => {
     if (!selectedRecord || !voidReason || pin.length !== 4) return;
 
     try {
+      if (!window.electron?.staff?.verify || !window.electron?.dispensing?.void) {
+        alert('API is not available. Please restart the application.');
+        return;
+      }
       // Verify PIN
-      const verified = await window.electron.staff.verify(pin);
-      if (!verified) {
+      const verified = await window.electron.staff.verify(pin) as { success: boolean };
+      if (!verified.success) {
         alert('Invalid PIN');
         return;
       }
@@ -370,7 +380,7 @@ export const DispensingLog: React.FC<DispensingLogProps> = ({ user }) => {
 
             <div className="p-6 border-t border-gray-200 flex justify-between">
               <button
-                onClick={() => window.electron.window.print()}
+                onClick={() => window.electron?.window?.print?.()}
                 className="flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
               >
                 <FileText className="w-4 h-4" />

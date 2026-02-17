@@ -21,9 +21,11 @@ interface PrintDialogProps {
     expirationDate?: string;
     directions: string;
     warnings: string[];
+    fullInstructions?: string[];
     context?: ReasonContext;
     indication?: string;
     daySupply?: number;
+    prescribedBy?: string;
   }>;
 }
 
@@ -201,13 +203,26 @@ export const PrintDialog: React.FC<PrintDialogProps> = ({
         </div>
         {med.warnings.length > 0 && (
           <div className="bg-yellow-50 border border-yellow-200 rounded p-2">
-            <div className="font-semibold text-xs text-yellow-800">IMPORTANT:</div>
-            {med.warnings.slice(0, 2).map((warning, i) => (
-              <div key={i} className="text-xs text-yellow-700">• {warning}</div>
+            <div className="font-semibold text-xs text-yellow-800 flex items-center gap-1">
+              <AlertTriangle className="h-3 w-3" />
+              IMPORTANT WARNINGS:
+            </div>
+            {med.warnings.map((warning, i) => (
+              <div key={i} className="text-xs text-yellow-700 mt-1">• {warning}</div>
             ))}
-            {med.warnings.length > 2 && (
-              <div className="text-xs text-yellow-600">...and {med.warnings.length - 2} more</div>
-            )}
+          </div>
+        )}
+        {med.fullInstructions && med.fullInstructions.length > 0 && (
+          <div className="bg-blue-50 border border-blue-200 rounded p-2 mt-2">
+            <div className="font-semibold text-xs text-blue-800">PATIENT INSTRUCTIONS:</div>
+            {med.fullInstructions.map((instruction, i) => (
+              <div key={i} className="text-xs text-blue-700 mt-1">{instruction}</div>
+            ))}
+          </div>
+        )}
+        {med.prescribedBy && (
+          <div className="text-xs text-gray-600 mt-2 border-t pt-2">
+            Prescribed by: {med.prescribedBy}
           </div>
         )}
         {(med.lotNumber || med.expirationDate) && (
@@ -250,13 +265,21 @@ export const PrintDialog: React.FC<PrintDialogProps> = ({
             <div className="text-xs">{med.directions}</div>
             {med.warnings.length > 0 && (
               <div className="mt-1">
-                <div className="font-semibold text-xs text-orange-700">WARNINGS:</div>
-                {med.warnings.slice(0, 3).map((warning, wi) => (
+                <div className="font-semibold text-xs text-orange-700 flex items-center gap-1">
+                  <AlertTriangle className="h-3 w-3" />
+                  WARNINGS:
+                </div>
+                {med.warnings.map((warning, wi) => (
                   <div key={wi} className="text-xs text-orange-600">☐ {warning}</div>
                 ))}
-                {med.warnings.length > 3 && (
-                  <div className="text-xs text-orange-500">...and {med.warnings.length - 3} more</div>
-                )}
+              </div>
+            )}
+            {med.fullInstructions && med.fullInstructions.length > 0 && (
+              <div className="mt-1">
+                <div className="font-semibold text-xs text-blue-700">PATIENT INSTRUCTIONS:</div>
+                {med.fullInstructions.map((instruction, ii) => (
+                  <div key={ii} className="text-xs text-blue-600">• {instruction}</div>
+                ))}
               </div>
             )}
           </div>

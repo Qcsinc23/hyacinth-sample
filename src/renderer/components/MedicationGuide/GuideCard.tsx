@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { ChevronDown, ChevronUp, AlertTriangle, Info, Pill, Beaker, ShieldAlert, Clock, Stethoscope, Baby } from 'lucide-react';
 import type { Medication } from '../../types';
 import { MEDICATIONS_DATA, type MedicationDetails } from '../../data';

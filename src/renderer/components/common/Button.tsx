@@ -32,6 +32,7 @@ export const Button: React.FC<ButtonProps> = ({
   children,
   variant = 'primary',
   size = 'md',
+  type = 'button',
   isLoading = false,
   leftIcon,
   rightIcon,
@@ -47,6 +48,7 @@ export const Button: React.FC<ButtonProps> = ({
 
   return (
     <button
+      type={type}
       className={`${baseStyles} ${variantStyles[variant]} ${sizeStyles[size]} ${widthStyle} ${loadingStyle} ${className}`}
       disabled={disabled || isLoading}
       {...props}

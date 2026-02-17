@@ -16,7 +16,7 @@ checkNodeEnv('production');
 deleteSourceMaps();
 
 const configuration: webpack.Configuration = {
-  devtool: 'source-map',
+  devtool: 'hidden-source-map',
 
   mode: 'production',
 

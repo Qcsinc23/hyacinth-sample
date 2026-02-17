@@ -3,7 +3,7 @@
  * CRUD operations for patient management
  */
 
-import { getDatabase, withTransaction } from '../db';
+import { getDatabase } from '../db';
 import type { Patient, CreatePatientInput, UpdatePatientInput, SearchResult } from '../../../shared/types';
 
 /**
@@ -32,7 +32,11 @@ export function createPatient(input: CreatePatientInput): Patient {
     now
   );
 
-  return getPatientById(Number(result.lastInsertRowid))!;
+  const created = getPatientById(Number(result.lastInsertRowid));
+  if (!created) {
+    throw new Error('Failed to create patient: record not found after insert');
+  }
+  return created;
 }
 
 /**
@@ -104,7 +108,11 @@ export function updatePatient(id: number, input: UpdatePatientInput): Patient {
   
   db.prepare(`UPDATE patients SET ${updates.join(', ')} WHERE id = ?`).run(...values);
   
-  return getPatientById(id)!;
+  const updated = getPatientById(id);
+  if (!updated) {
+    throw new Error(`Failed to update patient ${id}: record not found after update`);
+  }
+  return updated;
 }
 
 /**

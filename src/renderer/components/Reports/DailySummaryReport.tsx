@@ -21,6 +21,9 @@ export const DailySummaryReport: React.FC = () => {
   const fetchReport = async () => {
     setLoading(true);
     try {
+      if (!window.electron?.reports?.dailySummary) {
+        throw new Error('Reports API is not available');
+      }
       const data = await window.electron.reports.dailySummary(date);
       setReport(data);
     } catch (error) {

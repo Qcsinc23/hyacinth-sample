@@ -3,11 +3,11 @@
 -- Hyacinth Medication Dispensing System
 -- ============================================================================
 
--- Enable foreign key support
-PRAGMA foreign_keys = ON;
+-- Temporarily disable foreign keys for seeding
+PRAGMA foreign_keys = OFF;
 
--- Note: This seed assumes staff_member with id=1 exists (admin user)
--- If not exists, you'll need to create it first or update received_by values
+-- Note: This seed data uses received_by=1 which references the admin user
+-- The admin should be created by the main seed.ts file
 
 -- ============================================================================
 -- Insert Inventory Items for New Medications with Sample Lots
@@ -172,3 +172,6 @@ INSERT OR IGNORE INTO inventory (
 ) VALUES
 ('Valacyclovir', 'VCL2024001', '68180-0563-5', '2026-01-31', 80, 80, 'tablet', 'Generic Pharm', '2024-03-15', 1, 25, 'B1-D01', 'active'),
 ('Valacyclovir', 'VCL2024002', '68180-0563-5', '2027-05-20', 100, 100, 'tablet', 'Generic Pharm', '2024-08-25', 1, 25, 'B1-D02', 'active');
+
+-- Re-enable foreign key support
+PRAGMA foreign_keys = ON;

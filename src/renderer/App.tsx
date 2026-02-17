@@ -6,6 +6,9 @@ import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { AlertProvider } from './contexts/AlertContext';
 import { AccessibilityProvider } from './components/AccessibilityPanel';
 
+// Error Boundary
+import { ErrorBoundary } from './components/ErrorBoundary';
+
 // Security Components
 import { SessionTimeoutWarning } from './components/SessionTimeoutWarning';
 
@@ -34,6 +37,7 @@ import { PinInput } from './components/common/PinInput';
 import { Button } from './components/common/Button';
 import { ShortcutHelp } from './components/common/ShortcutHelp';
 import { AccessibilityPanel } from './components/AccessibilityPanel';
+import { SettingsPanel } from './components/Settings/SettingsPanel';
 
 // Hooks
 import { useInventory } from './hooks/useInventory';
@@ -48,7 +52,7 @@ import type { TabId, DispenseRecord, ToastType, Patient } from './types';
 // Login Screen Component
 const LoginScreen: React.FC = () => {
   const { login, failedAttempts, isLocked, lockoutTimeRemaining, sessionWarning } = useAuth();
-  const [pin, setPin] = useState('');
+  const [, setPin] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [showSessionWarning, setShowSessionWarning] = useState(false);
@@ -60,6 +64,7 @@ const LoginScreen: React.FC = () => {
       const timer = setTimeout(() => setShowSessionWarning(false), 10000);
       return () => clearTimeout(timer);
     }
+    return undefined;
   }, [sessionWarning]);
 
   const handlePinComplete = async (enteredPin: string) => {
@@ -161,6 +166,7 @@ const AppContent: React.FC = () => {
   const [showGuideModal, setShowGuideModal] = useState(false);
   const [showShortcutHelp, setShowShortcutHelp] = useState(false);
   const [showAccessibility, setShowAccessibility] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
   const [showPatientHistory, setShowPatientHistory] = useState(false);
   const [selectedPatientForHistory, setSelectedPatientForHistory] = useState<Patient | null>(null);
   const [toasts, setToasts] = useState<Array<{ id: string; type: ToastType; message: string }>>([]);
@@ -178,9 +184,26 @@ const AppContent: React.FC = () => {
   const [showCorrection, setShowCorrection] = useState(false);
   const [showVoid, setShowVoid] = useState(false);
   const [recordForAction, setRecordForAction] = useState<DispenseRecord | null>(null);
+  const [staffList, setStaffList] = useState<Array<{ id: string; name: string }>>([]);
 
   // Inventory
   const { inventory } = useInventory();
+
+  // Load staff list for log filters (when authenticated)
+  useEffect(() => {
+    if (!isAuthenticated || !window.electron?.staff?.getAll) return;
+    window.electron.staff
+      .getAll(true)
+      .then((list) => {
+        setStaffList(
+          (Array.isArray(list) ? list : []).map((s: { id: number; first_name: string; last_name: string }) => ({
+            id: String(s.id),
+            name: `${s.first_name || ''} ${s.last_name || ''}`.trim() || 'Unknown',
+          }))
+        );
+      })
+      .catch(() => setStaffList([]));
+  }, [isAuthenticated]);
 
   // Handle viewing patient history
   const handleViewPatientHistory = useCallback((patient: Patient) => {
@@ -293,7 +316,7 @@ const AppContent: React.FC = () => {
   };
 
   const handleSettingsClick = () => {
-    setShowAccessibility(true);
+    setShowSettings(true);
   };
 
   const handleInventoryClick = () => {
@@ -328,7 +351,7 @@ const AppContent: React.FC = () => {
                 filters={searchFilters}
                 onFiltersChange={setSearchFilters}
                 availableMedications={['Biktarvy', 'Descovy', 'Doxycycline', 'Bactrim DS']}
-                availableStaff={[{ id: '1', name: 'Admin' }]}
+                availableStaff={staffList}
               />
               <LogTable
                 onViewRecord={handleViewRecord}
@@ -423,6 +446,20 @@ const AppContent: React.FC = () => {
         onClose={() => setShowAccessibility(false)}
       />
 
+      {showSettings && (
+        <div className="fixed inset-0 z-50 bg-black bg-opacity-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-5xl w-full max-h-[90vh] overflow-auto">
+            <button
+              onClick={() => setShowSettings(false)}
+              className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 z-10"
+            >
+              ✕
+            </button>
+            <SettingsPanel className="pt-4" />
+          </div>
+        </div>
+      )}
+
       <ToastContainer toasts={toasts} onClose={removeToast} />
 
       {/* Session Timeout Warning Modal */}
@@ -439,12 +476,14 @@ const AppContent: React.FC = () => {
 // Main App Component
 export default function App() {
   return (
-    <AuthProvider>
-      <AlertProvider>
-        <AccessibilityProvider>
-          <AppContent />
-        </AccessibilityProvider>
-      </AlertProvider>
-    </AuthProvider>
+    <ErrorBoundary>
+      <AuthProvider>
+        <AlertProvider>
+          <AccessibilityProvider>
+            <AppContent />
+          </AccessibilityProvider>
+        </AlertProvider>
+      </AuthProvider>
+    </ErrorBoundary>
   );
 }

@@ -33,13 +33,13 @@ export const CorrectionModal: React.FC<CorrectionModalProps> = ({ record, onClos
     setIsVerifying(true);
     setPinError(null);
 
-    const isValid = await login(pin);
-    
-    if (isValid) {
+    const result = await login(pin);
+
+    if (result.success) {
       onCorrect(record.id, { reason, changes });
       onClose();
     } else {
-      setPinError('Invalid PIN. Please try again.');
+      setPinError(result.message || 'Invalid PIN. Please try again.');
       setPin('');
     }
 

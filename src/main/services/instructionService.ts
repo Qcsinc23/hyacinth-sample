@@ -9,7 +9,10 @@
  */
 
 import { validateLotForDispensing as validateInventoryLot, getLotByNumber, type LotValidationResult } from '../database/queries/inventory';
-import { MEDICATION_INSTRUCTION_TEMPLATES, normalizeMedicationId, findReasonConfig, type ReasonContext, type MedicationInstructionTemplate } from '../../renderer/data/medicationInstructions';
+import { REASON_INSTRUCTION_MAP } from '../../renderer/data/reasonInstructionMapping';
+import type { ReasonContext } from '../../renderer/types';
+import { getInstructionTemplateForMedication, getTemplatesForMedication, getContextsForMedication } from '../database/queries/medicationCatalog';
+import type { InstructionTemplate } from '../database/queries/medicationCatalog';
 
 // ============================================================================
 // Type Definitions
@@ -76,16 +79,15 @@ export function getContextFromReasons(reasons: DispenseReason[]): ReasonContextR
 
   // Count occurrences of each context
   for (const reason of reasons) {
-    const config = findReasonConfig(reason.reasonName);
+    const config = REASON_INSTRUCTION_MAP[reason.reasonName as keyof typeof REASON_INSTRUCTION_MAP];
 
     if (config) {
       const count = contexts.get(config.context) || 0;
       contexts.set(config.context, count + 1);
 
       // Track indications for context linking
-      if (config.linksToInstructions) {
-        detectedIndications.push(reason.reasonName);
-      }
+      // All reasons can potentially link to instructions
+      detectedIndications.push(reason.reasonName);
     } else if (reason.isCustom) {
       // Custom reasons default to 'other' context
       const count = contexts.get('other') || 0;
@@ -114,7 +116,7 @@ export function getContextFromReasons(reasons: DispenseReason[]): ReasonContextR
       conflictingReasons.push(
         ...reasons
           .filter(r => {
-            const config = findReasonConfig(r.reasonName);
+            const config = REASON_INSTRUCTION_MAP[r.reasonName as keyof typeof REASON_INSTRUCTION_MAP];
             return config && (
               (config.context === 'treatment' && preventionCount > 0) ||
               (['prevention', 'prep', 'pep', 'prophylaxis'].includes(config.context) && treatmentCount > 0)
@@ -156,27 +158,17 @@ export function getContextFromReasons(reasons: DispenseReason[]): ReasonContextR
 /**
  * Get instruction template for medication + context
  * Returns the most appropriate template or null if not found
+ * Uses database queries instead of hardcoded templates
  */
 export function getInstructionTemplate(
-  medicationId: string,
+  medicationName: string,
   context: ReasonContext
-): MedicationInstructionTemplate | null {
-  // Normalize the medication ID
-  const normalizedId = normalizeMedicationId(medicationId);
-
-  // Find all templates for this medication
-  const templates = MEDICATION_INSTRUCTION_TEMPLATES.filter(
-    t => t.medicationId === normalizedId
-  );
-
-  if (templates.length === 0) {
-    return null;
-  }
-
-  // Find exact context match
-  const exactMatch = templates.find(t => t.context === context);
-  if (exactMatch) {
-    return exactMatch;
+): InstructionTemplate | null {
+  // Query database for instruction template
+  const template = getInstructionTemplateForMedication(medicationName, context);
+  
+  if (template) {
+    return template;
   }
 
   // Fallback logic for related contexts
@@ -191,35 +183,28 @@ export function getInstructionTemplate(
 
   const fallbackContexts = contextMap[context] || [];
   for (const fallbackContext of fallbackContexts) {
-    const fallback = templates.find(t => t.context === fallbackContext);
+    const fallback = getInstructionTemplateForMedication(medicationName, fallbackContext);
     if (fallback) {
       return fallback;
     }
   }
 
-  // Return first template as last resort
-  return templates[0];
+  // Return null if no template found
+  return null;
 }
 
 /**
  * Get all available contexts for a medication
  */
-export function getAvailableContextsForMedication(medicationId: string): ReasonContext[] {
-  const normalizedId = normalizeMedicationId(medicationId);
-  const templates = MEDICATION_INSTRUCTION_TEMPLATES.filter(
-    t => t.medicationId === normalizedId
-  );
-  return [...new Set(templates.map(t => t.context))];
+export function getAvailableContextsForMedication(medicationName: string): ReasonContext[] {
+  return getContextsForMedication(medicationName);
 }
 
 /**
  * Get all instruction templates for a medication
  */
-export function getAllTemplatesForMedication(medicationId: string): MedicationInstructionTemplate[] {
-  const normalizedId = normalizeMedicationId(medicationId);
-  return MEDICATION_INSTRUCTION_TEMPLATES.filter(
-    t => t.medicationId === normalizedId
-  );
+export function getAllTemplatesForMedication(medicationName: string): InstructionTemplate[] {
+  return getTemplatesForMedication(medicationName);
 }
 
 // ============================================================================
@@ -228,47 +213,22 @@ export function getAllTemplatesForMedication(medicationId: string): MedicationIn
 
 /**
  * Calculate day supply from quantity and instruction template
- * Uses the template's multiplier or calculates based on standard dosing
+ * Uses the template's daySupplyCalculation string to determine multiplier
  */
 export function calculateDaySupply(
   quantity: number,
-  instructions: MedicationInstructionTemplate | null
+  template: InstructionTemplate | null
 ): number {
-  if (!instructions) {
+  if (!template || quantity <= 0) {
     // Default fallback: assume 30-day supply
     return 30;
   }
 
-  const { daySupplyMultiplier, shortDosing } = instructions;
-
-  // Parse the short dosing to understand frequency
-  let dosesPerDay = 1;
-
-  if (shortDosing.includes('twice daily') || shortDosing.includes('2 times')) {
-    dosesPerDay = 2;
-  } else if (shortDosing.includes('three times') || shortDosing.includes('3 times')) {
-    dosesPerDay = 3;
-  } else if (shortDosing.includes('four times') || shortDosing.includes('4 times')) {
-    dosesPerDay = 4;
-  } else if (shortDosing.includes('once daily') || shortDosing.includes('1 tablet')) {
-    dosesPerDay = 1;
-  }
-
-  // For Doxy-PEP which is as-needed, day supply is based on number of doses
-  if (instructions.context === 'prevention' && instructions.medicationId === 'doxycycline') {
-    return quantity; // Each 200mg dose is 2 tablets, so day supply = quantity/2 for encounters
-  }
-
-  // Standard calculation using the multiplier
-  // The multiplier represents the default quantity for the specified duration
-  if (daySupplyMultiplier > 0) {
-    // For treatments with fixed duration (like 7-day antibiotic), return that duration
-    if (instructions.context === 'treatment' && daySupplyMultiplier <= 30) {
-      return Math.max(1, Math.round(daySupplyMultiplier * (quantity / daySupplyMultiplier)));
-    }
-
-    // For chronic medications, estimate based on dosing
-    return Math.max(1, Math.round(quantity / dosesPerDay));
+  // Parse multiplier from daySupplyCalculation string
+  const multiplier = parseDaySupplyMultiplier(template.daySupplyCalculation);
+  
+  if (multiplier > 0) {
+    return Math.max(1, Math.round(quantity / multiplier));
   }
 
   // Fallback: estimate based on once-daily dosing
@@ -309,14 +269,24 @@ export function estimateDaySupplyForCustomMedication(
  * Get warnings for medication + context
  * Returns relevant warnings based on the context
  */
-export function getWarnings(medicationId: string, context: ReasonContext): string[] {
-  const template = getInstructionTemplate(medicationId, context);
+export function getWarnings(medicationName: string, context: ReasonContext): string[] {
+  const template = getInstructionTemplate(medicationName, context);
 
   if (!template) {
     return ['No specific warnings available for this medication'];
   }
 
-  const warnings: string[] = [...template.warnings];
+  // Parse warnings from JSON string if needed
+  let warnings: string[] = [];
+  if (typeof template.warnings === 'string') {
+    try {
+      warnings = JSON.parse(template.warnings);
+    } catch {
+      warnings = [template.warnings];
+    }
+  } else if (Array.isArray(template.warnings)) {
+    warnings = template.warnings;
+  }
 
   // Add context-specific warnings
   switch (context) {
@@ -348,11 +318,11 @@ export function getWarnings(medicationId: string, context: ReasonContext): strin
  * Returns concise dosing information suitable for pharmacy labels
  */
 export function getShortDosing(
-  medicationId: string,
+  medicationName: string,
   context: ReasonContext,
   quantity?: number
 ): string {
-  const template = getInstructionTemplate(medicationId, context);
+  const template = getInstructionTemplate(medicationName, context);
 
   if (!template) {
     return 'Take as directed by healthcare provider';
@@ -361,8 +331,10 @@ export function getShortDosing(
   let dosing = template.shortDosing;
 
   // Add quantity context if provided
-  if (quantity !== undefined) {
-    const daySupply = calculateDaySupply(quantity, template);
+  if (quantity !== undefined && template.daySupplyCalculation) {
+    // Parse day supply from calculation string
+    const multiplier = parseDaySupplyMultiplier(template.daySupplyCalculation);
+    const daySupply = quantity > 0 && multiplier > 0 ? Math.round(quantity / multiplier) : 0;
     if (daySupply > 0 && daySupply <= 365) {
       dosing += ` (${daySupply}-day supply)`;
     }
@@ -374,14 +346,38 @@ export function getShortDosing(
 /**
  * Get full instructions formatted for patient education
  */
-export function getFullInstructions(medicationId: string, context: ReasonContext): string[] {
-  const template = getInstructionTemplate(medicationId, context);
+export function getFullInstructions(medicationName: string, context: ReasonContext): string[] {
+  const template = getInstructionTemplate(medicationName, context);
 
   if (!template) {
     return ['Consult your healthcare provider for specific instructions'];
   }
 
-  return template.fullInstructions;
+  // Parse full instructions from JSON string if needed
+  if (typeof template.fullInstructions === 'string') {
+    try {
+      return JSON.parse(template.fullInstructions);
+    } catch {
+      return [template.fullInstructions];
+    }
+  } else if (Array.isArray(template.fullInstructions)) {
+    return template.fullInstructions;
+  }
+  
+  return [];
+}
+
+// Helper to parse day supply multiplier from calculation string
+function parseDaySupplyMultiplier(calculation: string): number {
+  if (!calculation) return 1;
+  
+  const match = calculation.match(/(\d+(?:\.\d+)?)\s*(?:tablet|cap|pill|dose|unit).*?(?:per|\/)\s*day/i);
+  if (match) {
+    return parseFloat(match[1]);
+  }
+  
+  const numMatch = calculation.match(/(\d+(?:\.\d+)?)/);
+  return numMatch ? parseFloat(numMatch[1]) : 1;
 }
 
 // ============================================================================
@@ -432,7 +428,7 @@ export async function populateLineItemInstructions(
 
   const inventory = lotValidation.lot!;
 
-  // Get instruction template
+  // Get instruction template from database
   const template = getInstructionTemplate(medicationName, contextResult.context);
 
   // Build dosing instructions
@@ -447,17 +443,27 @@ export async function populateLineItemInstructions(
   if (template) {
     dosingInstructions = template.shortDosing;
     daySupply = calculateDaySupply(quantity, template);
-    warnings = [...template.warnings];
+    
+    // Parse warnings from JSON
+    if (typeof template.warnings === 'string') {
+      try {
+        warnings = JSON.parse(template.warnings);
+      } catch {
+        warnings = [template.warnings];
+      }
+    } else if (Array.isArray(template.warnings)) {
+      warnings = template.warnings;
+    }
+    
     indication = template.indication;
-    additionalLabelInfo = template.additionalLabelInfo;
-    storageRequirements = template.storageRequirements;
-    medicationStrength = template.strength;
+    medicationStrength = template.strength || undefined;
 
     // Add context-specific info to dosing
-    if (template.context === 'pep' && template.daySupplyMultiplier === 28) {
+    const multiplier = parseDaySupplyMultiplier(template.daySupplyCalculation);
+    if (template.context === 'pep' && multiplier === 28) {
       dosingInstructions += ' for 28 days - Complete full course';
-    } else if (template.context === 'treatment' && template.daySupplyMultiplier <= 14) {
-      dosingInstructions += ` - Complete all ${template.daySupplyMultiplier} days`;
+    } else if (template.context === 'treatment' && multiplier <= 14) {
+      dosingInstructions += ` - Complete all ${multiplier} days`;
     }
   } else {
     // Custom medication fallback

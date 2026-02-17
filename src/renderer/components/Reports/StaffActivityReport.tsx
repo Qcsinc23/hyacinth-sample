@@ -33,6 +33,9 @@ export const StaffActivityReport: React.FC = () => {
     // Load staff list
     const loadStaff = async () => {
       try {
+        if (!window.electron?.staff?.getAll) {
+          throw new Error('Staff API is not available');
+        }
         const staff = await window.electron.staff.getAll();
         setStaffList(staff.map((s: any) => ({ id: s.id, name: `${s.first_name} ${s.last_name}` })));
       } catch (error) {
@@ -45,6 +48,9 @@ export const StaffActivityReport: React.FC = () => {
   const fetchReport = async () => {
     setLoading(true);
     try {
+      if (!window.electron?.reports?.staffActivity) {
+        throw new Error('Reports API is not available');
+      }
       const data = await window.electron.reports.staffActivity(
         staffId === 'all' ? null : staffId,
         { from: dateFrom, to: dateTo }

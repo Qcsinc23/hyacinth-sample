@@ -26,6 +26,9 @@ export const MedicationGuide: React.FC = () => {
 
   const loadMedications = async () => {
     try {
+      if (!window.electron?.medication?.getAll) {
+        throw new Error('Medication API is not available');
+      }
       const meds = await window.electron.medication.getAll();
       setMedications(meds as Medication[]);
     } catch (err) {

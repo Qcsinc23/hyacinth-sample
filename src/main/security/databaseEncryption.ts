@@ -247,7 +247,7 @@ class KeyManager {
   /**
    * Reset encryption with recovery key (destructive - loses all encrypted data)
    */
-  resetEncryption(recoveryKey: string): boolean {
+  resetEncryption(_recoveryKey: string): boolean {
     // In a real implementation, this would verify the recovery key
     // and potentially allow data recovery or re-encryption
     log.warn('[Encryption] Encryption reset requested');

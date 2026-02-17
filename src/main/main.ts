@@ -7,7 +7,13 @@
  */
 
 import path from 'path';
+import fs from 'fs';
 import { app, BrowserWindow, shell, ipcMain, dialog } from 'electron';
+
+// Set app name before any getPath('userData') so the database and config live in a
+// stable directory (e.g. ~/Library/Application Support/Hyacinth) on every launch.
+// Without this, development runs can end up with different userData and a fresh DB each time.
+app.setName('Hyacinth');
 import { autoUpdater } from 'electron-updater';
 import log from 'electron-log';
 import MenuBuilder from './menu';
@@ -18,14 +24,25 @@ import { initDatabase, runSchema, closeDatabase } from './database/db';
 import { initializeDatabase, getDatabaseStatus } from './database';
 import { registerIpcHandlers } from './ipc-handlers';
 
+// Import authentication middleware
+import { 
+  createSession, 
+  clearSession, 
+  isAuthenticated, 
+  getCurrentSession,
+  touchSession, 
+  setSessionTimeout 
+} from './middleware/authMiddleware';
+
 // Import services
-import { checkForExpiredItems } from './services/alertService';
+import { checkForExpiredItems } from './database/queries/alerts';
 import { startBackupScheduler, runManualBackup } from './backup/scheduler';
 import { initializeDefaultSettings, getSetting, setSetting } from './settings/settings';
 import { setMainWindow as setPrintMainWindow } from './services/printService';
 
 // Import security utilities
 import { hashPin, verifyPin } from './security/pin';
+import { getStaffById, verifyPin as verifyStaffPinHash } from './database/queries/staff';
 
 class AppUpdater {
   constructor() {
@@ -60,8 +77,10 @@ const resetInactivityTimer = () => {
     inactivityTimer = setTimeout(() => {
       if (mainWindow) {
         isLocked = true;
+        // Clear authentication session on auto-lock
+        clearSession();
         mainWindow.webContents.send('app:lock');
-        log.info('Application auto-locked due to inactivity');
+        log.info('Application auto-locked due to inactivity - session cleared');
       }
     }, INACTIVITY_TIMEOUT);
   }
@@ -76,6 +95,20 @@ const createWindow = async () => {
     return path.join(RESOURCES_PATH, ...paths);
   };
 
+  // Preload path: use preload.js next to main when it exists (built/production),
+  // otherwise use dev DLL path. When running built app via "electron dist/main/main.js",
+  // app.isPackaged is false but preload.js is in __dirname, so we must check for it.
+  const preloadNextToMain = path.join(__dirname, 'preload.js');
+  const preloadDev = path.join(__dirname, '../../.erb/dll/preload.js');
+  const preloadPath = fs.existsSync(preloadNextToMain)
+    ? preloadNextToMain
+    : preloadDev;
+  if (!fs.existsSync(preloadPath)) {
+    log.warn('[Main] Preload not found at', preloadPath, '(tried', preloadNextToMain, 'and', preloadDev, ')');
+  } else {
+    log.info('[Main] Using preload:', preloadPath);
+  }
+
   mainWindow = new BrowserWindow({
     show: false,
     width: 1400,
@@ -85,11 +118,10 @@ const createWindow = async () => {
     icon: getAssetPath('icon.png'),
     title: 'Hyacinth v2.1 - Medication Dispensing System',
     webPreferences: {
-      preload: app.isPackaged
-        ? path.join(__dirname, 'preload.js')
-        : path.join(__dirname, '../../.erb/dll/preload.js'),
-      contextIsolation: true,
-      nodeIntegration: false,
+      preload: preloadPath,
+      contextIsolation: true, // Explicitly enable for security
+      nodeIntegration: false, // Explicitly disable for security
+      webSecurity: true, // Explicitly enable web security
     },
   });
 
@@ -116,11 +148,17 @@ const createWindow = async () => {
     if (inactivityTimer) {
       clearTimeout(inactivityTimer);
     }
+    // Clear session on window close
+    clearSession();
   });
 
   // Track user activity for auto-lock
   mainWindow.webContents.on('before-input-event', () => {
     resetInactivityTimer();
+    // Also update session activity
+    if (isAuthenticated()) {
+      touchSession();
+    }
   });
   
   mainWindow.on('focus', () => {
@@ -138,20 +176,34 @@ const createWindow = async () => {
   new AppUpdater();
 };
 
-// IPC handlers for app lock
-ipcMain.handle('app:unlock', async (_event, pin: string) => {
+// ============================================================================
+// IPC Handlers for App Lock and Authentication
+// ============================================================================
+
+ipcMain.handle('app:unlock', async (_event, pin?: string) => {
   try {
     const storedHash = getSetting('pinHash') as string | null;
     
     if (!storedHash) {
-      // No PIN set, just unlock
+      // No app PIN is configured, unlock immediately.
       isLocked = false;
       resetInactivityTimer();
       return { success: true };
     }
-    
+
+    // If there is already an authenticated staff session (e.g., after lock screen PIN),
+    // allow unlock without re-validating an app-level PIN.
+    if (!pin) {
+      if (isAuthenticated()) {
+        isLocked = false;
+        resetInactivityTimer();
+        return { success: true };
+      }
+      return { success: false, error: 'PIN required' };
+    }
+
     const isValid = await verifyPin(pin, storedHash);
-    
+
     if (isValid) {
       isLocked = false;
       resetInactivityTimer();
@@ -168,6 +220,111 @@ ipcMain.handle('app:unlock', async (_event, pin: string) => {
 ipcMain.handle('app:isLocked', () => {
   return isLocked;
 });
+
+// Staff login with PIN - creates authenticated session
+ipcMain.handle('auth:login', async (_event, { staffId, pin }: { staffId: number; pin: string }) => {
+  try {
+    // Verify the staff member exists and is active
+    const staff = getStaffById(staffId);
+    if (!staff) {
+      return { success: false, error: 'Staff member not found' };
+    }
+    
+    if (!staff.is_active) {
+      return { success: false, error: 'Staff account is inactive' };
+    }
+    
+    // Verify the PIN
+    const isValidPin = verifyStaffPinHash(pin, staff.pin_hash);
+    if (!isValidPin) {
+      return { success: false, error: 'Invalid PIN' };
+    }
+    
+    // Create authenticated session
+    createSession(staffId, staff.role);
+    isLocked = false;
+    resetInactivityTimer();
+    
+    log.info(`[Auth] Staff ${staffId} (${staff.role}) logged in successfully`);
+    
+    return { 
+      success: true, 
+      data: { 
+        staffId: staff.id, 
+        role: staff.role,
+        firstName: staff.first_name,
+        lastName: staff.last_name,
+      } 
+    };
+  } catch (error) {
+    log.error('[Auth] Login failed:', error);
+    return { success: false, error: 'Login failed' };
+  }
+});
+
+// Logout handler - clears session
+ipcMain.handle('auth:logout', async () => {
+  try {
+    const session = getCurrentSession();
+    if (session) {
+      log.info(`[Auth] Staff ${session.staffId} logged out`);
+    }
+    clearSession();
+    isLocked = true;
+    return { success: true };
+  } catch (error) {
+    log.error('[Auth] Logout failed:', error);
+    return { success: false, error: 'Logout failed' };
+  }
+});
+
+// Check authentication status
+ipcMain.handle('auth:check', async () => {
+  try {
+    const authenticated = isAuthenticated();
+    const session = getCurrentSession();
+    
+    return { 
+      success: true, 
+      data: { 
+        authenticated,
+        staffId: session?.staffId || null,
+        role: session?.role || null,
+      } 
+    };
+  } catch (error) {
+    log.error('[Auth] Check failed:', error);
+    return { success: false, error: 'Failed to check authentication' };
+  }
+});
+
+// Touch session to prevent timeout
+ipcMain.handle('auth:touch', async () => {
+  try {
+    touchSession();
+    resetInactivityTimer();
+    return { success: true };
+  } catch (error) {
+    log.error('[Auth] Touch session failed:', error);
+    return { success: false, error: 'Failed to update session' };
+  }
+});
+
+// Set session timeout
+ipcMain.handle('auth:setTimeout', async (_event, timeoutMs: number) => {
+  try {
+    setSessionTimeout(timeoutMs);
+    log.info(`[Auth] Session timeout set to ${timeoutMs}ms`);
+    return { success: true };
+  } catch (error) {
+    log.error('[Auth] Set timeout failed:', error);
+    return { success: false, error: 'Failed to set timeout' };
+  }
+});
+
+// ============================================================================
+// Security Handlers
+// ============================================================================
 
 ipcMain.handle('security:setPin', async (_event, pin: string) => {
   try {
@@ -217,7 +374,10 @@ ipcMain.handle('security:changePin', async (_event, oldPin: string, newPin: stri
   }
 });
 
+// ============================================================================
 // Backup IPC handlers
+// ============================================================================
+
 ipcMain.handle('backup:run', async () => {
   try {
     const result = await runManualBackup();
@@ -228,7 +388,10 @@ ipcMain.handle('backup:run', async () => {
   }
 });
 
+// ============================================================================
 // Window control IPC handlers
+// ============================================================================
+
 ipcMain.handle('window:print', () => {
   if (mainWindow) {
     mainWindow.webContents.print({
@@ -245,7 +408,10 @@ ipcMain.handle('window:getPrinters', async () => {
   return [];
 });
 
+// ============================================================================
 // App event handlers
+// ============================================================================
+
 app.on('second-instance', () => {
   if (mainWindow) {
     if (mainWindow.isMinimized()) {
@@ -299,4 +465,5 @@ app.whenReady()
 // Cleanup on quit
 app.on('will-quit', () => {
   closeDatabase();
+  clearSession();
 });

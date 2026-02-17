@@ -18,6 +18,7 @@ export interface Settings {
   
   // Security Settings
   pinEnabled: boolean;
+  pinHash: string | null;
   autoLockEnabled: boolean;
   autoLockTimeoutMinutes: number;
   requirePinForDispensing: boolean;
@@ -72,6 +73,7 @@ export const DEFAULT_SETTINGS: Settings = {
   
   // Security Settings
   pinEnabled: true,
+  pinHash: null,
   autoLockEnabled: true,
   autoLockTimeoutMinutes: 5,
   requirePinForDispensing: false,
@@ -265,6 +267,11 @@ export const SETTING_METADATA: Record<
     label: 'Enable PIN Protection',
     description: 'Require PIN to access the application',
     type: 'boolean',
+  },
+  pinHash: {
+    label: 'PIN Hash',
+    description: 'Stored hashed PIN value (managed by security handlers)',
+    type: 'string',
   },
   autoLockEnabled: {
     label: 'Auto-Lock',

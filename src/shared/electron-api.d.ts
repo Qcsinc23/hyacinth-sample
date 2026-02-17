@@ -35,6 +35,7 @@ export interface ElectronAPI {
   database: {
     initialize: () => Promise<{ initialized: boolean }>;
     runSeed: () => Promise<{ seeded: boolean }>;
+    seed: () => Promise<boolean>;
     healthCheck: () => Promise<{ healthy: boolean; issues: string[] }>;
     getVersion: () => Promise<{ currentVersion: number; latestVersion: number; pendingCount: number }>;
     runMigrations: () => Promise<{ currentVersion: number; latestVersion: number; pendingCount: number }>;
@@ -103,6 +104,11 @@ export interface ElectronAPI {
       search?: string;
       status?: string;
       expiringBefore?: string;
+    }) => Promise<SearchResult<Inventory>>;
+    getAllLots: (options?: {
+      page?: number;
+      pageSize?: number;
+      search?: string;
     }) => Promise<SearchResult<Inventory>>;
     getByMedication: (medicationName: string, onlyActive?: boolean) => Promise<Inventory[]>;
     getLowStock: () => Promise<Inventory[]>;
@@ -182,4 +188,3 @@ export interface ElectronAPI {
 
 // Note: Window.electron is declared in src/main/preload.ts
 // This file only defines the ElectronAPI interface for type checking
-export type { ElectronAPI };

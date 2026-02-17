@@ -1,0 +1,16 @@
+{
+  "extends": "./tsconfig.json",
+  "include": ["src/main/**/*.ts", "src/shared/**/*.ts"],
+  "exclude": [
+    "src/main/**/*.test.ts",
+    "src/main/ipc.ts.backup",
+    "src/main/database/operations.ts.backup",
+    "test",
+    "e2e",
+    "src/__tests__",
+    "release/build",
+    "release/app/dist",
+    ".erb/dll",
+    "node_modules"
+  ]
+}

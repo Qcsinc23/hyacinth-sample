@@ -21,6 +21,9 @@ export const InventoryUsageReport: React.FC = () => {
   const fetchReport = async () => {
     setLoading(true);
     try {
+      if (!window.electron?.reports?.inventoryUsage) {
+        throw new Error('Reports API is not available');
+      }
       const data = await window.electron.reports.inventoryUsage();
       setReport(data);
     } catch (error) {

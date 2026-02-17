@@ -123,7 +123,11 @@ export function acknowledgeAlert(alertId: number, staffId: number): InventoryAle
     WHERE id = ?
   `).run(staffId, now, alertId);
   
-  return getAlertById(alertId)!;
+  const alert = getAlertById(alertId);
+  if (!alert) {
+    throw new Error(`Failed to acknowledge alert ${alertId}: alert not found`);
+  }
+  return alert;
 }
 
 /**
@@ -205,7 +209,11 @@ export function createAlert(
     ) VALUES (?, ?, ?, ?, ?)
   `).run(inventoryId, alertType, severity, message, now);
   
-  return getAlertById(Number(result.lastInsertRowid))!;
+  const created = getAlertById(Number(result.lastInsertRowid));
+  if (!created) {
+    throw new Error('Failed to create alert: record not found after insert');
+  }
+  return created;
 }
 
 /**
@@ -238,4 +246,54 @@ export function cleanupOldAlerts(olderThanDays: number): number {
   `).run(cutoffStr);
   
   return result.changes;
+}
+
+/**
+ * Scan all active inventory items and check for expired/expiring items
+ * Creates alerts as needed. Called periodically from main process.
+ */
+export function checkForExpiredItems(): void {
+  const { checkAndCreateAlerts, getInventoryById } = require('./inventory');
+  const db = getDatabase();
+  const today = new Date().toISOString().split('T')[0];
+  
+  // Get all active inventory items
+  const activeItems = db.prepare(`
+    SELECT id FROM inventory 
+    WHERE status = 'active' AND quantity_on_hand > 0
+  `).all() as Array<{ id: number }>;
+  
+  let expiredCount = 0;
+  let expiringCount = 0;
+  
+  for (const item of activeItems) {
+    const inventory = getInventoryById(item.id);
+    if (!inventory) continue;
+    
+    // Check expiration
+    if (inventory.expiration_date < today) {
+      expiredCount++;
+    } else {
+      // Check if expiring within 30 days
+      const thirtyDaysFromNow = new Date();
+      thirtyDaysFromNow.setDate(thirtyDaysFromNow.getDate() + 30);
+      const thirtyDaysStr = thirtyDaysFromNow.toISOString().split('T')[0];
+      
+      if (inventory.expiration_date <= thirtyDaysStr) {
+        expiringCount++;
+      }
+    }
+    
+    // This will create alerts if needed
+    checkAndCreateAlerts(item.id);
+  }
+  
+  const log = require('electron-log');
+  if (expiredCount > 0) {
+    log.warn(`Found ${expiredCount} expired medication lot(s)`);
+  }
+  if (expiringCount > 0) {
+    log.info(`Found ${expiringCount} medication lot(s) expiring within 30 days`);
+  }
+  log.info(`Checked ${activeItems.length} inventory items for expiration`);
 }

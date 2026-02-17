@@ -27,14 +27,12 @@ let settings: NotificationSettings = {
   desktopEnabled: true,
 };
 
-// Icon URLs for different notification types
-const notificationIcons: Record<NotificationType, string> = {
-  expiring: '⚠️',
-  low_stock: '📦',
-  expired: '🚫',
-  system: 'ℹ️',
-  success: '✅',
-};
+function getNotificationApi(): typeof Notification | null {
+  if (typeof window === 'undefined' || !('Notification' in window)) {
+    return null;
+  }
+  return window.Notification;
+}
 
 // Load settings from localStorage
 function loadSettings() {
@@ -59,27 +57,28 @@ function saveSettings() {
 
 // Request permission for desktop notifications
 async function requestPermission(): Promise<NotificationPermission> {
-  if (!('Notification' in window)) {
+  const NotificationApi = getNotificationApi();
+  if (!NotificationApi) {
     return 'denied';
   }
   
-  if (Notification.permission === 'granted') {
+  if (NotificationApi.permission === 'granted') {
     return 'granted';
   }
   
-  if (Notification.permission === 'denied') {
+  if (NotificationApi.permission === 'denied') {
     return 'denied';
   }
   
-  return await Notification.requestPermission();
+  return NotificationApi.requestPermission();
 }
 
 // Check if notifications are supported and permitted
 function canShowDesktopNotification(): boolean {
+  const NotificationApi = getNotificationApi();
   return (
-    typeof window !== 'undefined' &&
-    'Notification' in window &&
-    Notification.permission === 'granted' &&
+    NotificationApi !== null &&
+    NotificationApi.permission === 'granted' &&
     settings.desktopEnabled
   );
 }
@@ -115,9 +114,10 @@ export const notificationService = {
   // Initialize the service
   init: async () => {
     loadSettings();
+    const NotificationApi = getNotificationApi();
     
     // Request permission on init if enabled
-    if (settings.desktopEnabled && Notification.permission === 'default') {
+    if (settings.desktopEnabled && NotificationApi?.permission === 'default') {
       await requestPermission();
     }
   },
@@ -130,8 +130,7 @@ export const notificationService = {
 
   // Check permission status
   getPermissionStatus: (): NotificationPermission => {
-    if (!('Notification' in window)) return 'denied';
-    return Notification.permission;
+    return getNotificationApi()?.permission ?? 'denied';
   },
 
   // Send a notification

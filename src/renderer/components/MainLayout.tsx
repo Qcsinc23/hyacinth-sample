@@ -29,6 +29,7 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ user, onLogout, children
 
   const checkAlerts = async () => {
     try {
+      if (!window.electron?.alerts) return;
       await window.electron.alerts.check();
       const alerts = await window.electron.alerts.get(false);
       setAlertCount((alerts as any[]).length);

@@ -7,8 +7,8 @@ interface UseAlertPollingOptions {
 }
 
 export function useAlertPolling(options: UseAlertPollingOptions = {}) {
-  const { interval = 30000, severityFilter } = options;
-  const [alerts, setAlerts] = useState<InventoryAlert[]>([]);
+  const { interval = 30000 } = options;
+  const [alerts] = useState<InventoryAlert[]>([]);
   const [isPolling, setIsPolling] = useState(false);
   const [lastPollTime, setLastPollTime] = useState<Date | null>(null);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);

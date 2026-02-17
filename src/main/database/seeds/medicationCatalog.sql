@@ -88,9 +88,9 @@ SELECT
     (SELECT id FROM medication_catalog WHERE medication_name = 'Biktarvy'),
     'treatment',
     'HIV-1 Infection',
-    'Take 1 tablet by mouth once daily',
-    '["Take at the same time each day", "May take with or without food", "Do not skip doses - resistance can develop", "If you miss a dose, take it as soon as you remember"]',
-    '["Severe exacerbations of Hepatitis B reported if discontinued", "Do not stop without consulting healthcare provider", "This medication does not cure HIV or prevent transmission"]',
+    'Take ONE tablet by mouth once daily at the same time each day. CONTINUOUS THERAPY.',
+    '["Take with or without food", "Timing: Same time each day for optimal effectiveness", "Missed Dose Guidelines: If within 18 hours of usual time: Take as soon as possible, then next dose at usual time. If 18+ hours after usual time: Skip missed dose, take next dose at usual time", "Vomiting: If within 1 hour of dose, take another tablet; if >1 hour, no replacement needed", "Take 2 hours BEFORE or 6 hours AFTER antacids with aluminum/magnesium", "Alternative with food: Calcium and iron supplements can be taken with Biktarvy if taken with food"]',
+    '["⚠️ Take with or without food", "⚠️ Do NOT stop without talking to doctor", "⚠️ Take 2 hrs BEFORE or 6 hrs AFTER antacids", "⚠️ Calcium/iron OK if taken WITH food", "⚠️ Regular lab monitoring required", "⚠️ Hepatitis B: Severe acute exacerbations possible if discontinued"]',
     '30',
     '["HIV Treatment", "Antiretroviral Therapy", "Initial Regimen"]';
 
@@ -99,9 +99,9 @@ SELECT
     (SELECT id FROM medication_catalog WHERE medication_name = 'Biktarvy'),
     'pep',
     'nPEP (Non-occupational Post-Exposure Prophylaxis)',
-    'Take 1 tablet by mouth once daily for 28 days',
-    '["Must be started within 72 hours of exposure", "Take 2 hours BEFORE or 6 hours AFTER medications containing polyvalent cations", "Complete full 28-day course", "If you miss doses, resistance can develop"]',
-    '["Do not miss any doses", "Complete entire 28-day course even if you feel well", "Follow-up HIV testing required after completion"]',
+    'Take ONE tablet by mouth once daily for 28 days. START IMMEDIATELY.',
+    '["Take with or without food", "Must be started within 72 hours of exposure", "Duration: 28 days of continuous therapy", "Missed Dose: Take as soon as remembered unless within 4 hours of next dose; do not double dose", "Take 2 hours BEFORE or 6 hours AFTER medications containing polyvalent cations (aluminum, calcium, iron, magnesium)", "Alternative for calcium/iron: Can be taken together WITH food", "Tablet can be split for children; both halves must be taken within 10 minutes"]',
+    '["⚠️ Do NOT miss doses - resistance can develop", "⚠️ Complete FULL 28 days even if feeling well", "⚠️ Do NOT stop without consulting healthcare provider", "⚠️ Take 2 hrs BEFORE or 6 hrs AFTER antacids", "⚠️ Keep ALL follow-up appointments", "⚠️ Report signs of allergic reaction immediately (rash, fever, difficulty breathing)"]',
     '28',
     '["nPEP", "HIV Exposure", "Post-Exposure Prophylaxis"]';
 
@@ -114,9 +114,9 @@ SELECT
     (SELECT id FROM medication_catalog WHERE medication_name = 'Descovy'),
     'prep',
     'Pre-Exposure Prophylaxis (PrEP)',
-    'Take 1 tablet by mouth once daily',
-    '["Take at the same time each day", "May take with or without food", "Do not skip doses for maximum protection", "Get tested for HIV every 3 months"]',
-    '["Must be HIV-negative before starting", "Does not prevent other STIs", "Requires regular kidney function monitoring"]',
+    'Take ONE tablet by mouth once daily. Take EVERY DAY, not just before sex.',
+    '["Take with or without food", "For PrEP: Must be taken EVERY DAY, not just when exposure is anticipated", "Missed Dose: Take as soon as remembered; if close to next dose, skip and resume schedule", "Time to maximum protection is unknown; use additional prevention measures", "Must be confirmed HIV-negative before starting and every 3 months"]',
+    '["⚠️ Take with or without food", "⚠️ Does NOT protect against other STIs - use condoms", "⚠️ HIV test required every 3 months", "⚠️ Do NOT share with others", "⚠️ Keep ALL follow-up appointments", "⚠️ If recent HIV exposure suspected (<1 month), need acute HIV testing before starting"]',
     '30',
     '["PrEP - Daily", "HIV Prevention", "Pre-Exposure Prophylaxis"]';
 
@@ -125,9 +125,9 @@ SELECT
     (SELECT id FROM medication_catalog WHERE medication_name = 'Descovy'),
     'treatment',
     'HIV-1 Infection',
-    'Take 1 tablet by mouth once daily',
-    '["Take at the same time each day", "May take with or without food", "Do not skip doses - resistance can develop"]',
-    '["Severe exacerbations of Hepatitis B reported if discontinued", "Do not stop without consulting healthcare provider"]',
+    'Take ONE tablet by mouth once daily with other HIV medications as prescribed.',
+    '["Take with or without food", "Take at the same time each day", "Do not skip doses - resistance can develop", "Must be taken WITH other HIV medications", "Do not discontinue without provider consultation (Hepatitis B risk)"]',
+    '["⚠️ Take with or without food", "⚠️ Do NOT stop without talking to doctor", "⚠️ Must be taken WITH other HIV medications", "⚠️ Regular kidney function monitoring required", "⚠️ Report muscle pain or weakness immediately", "⚠️ Severe exacerbations of Hepatitis B reported if discontinued"]',
     '30',
     '["HIV Treatment", "Antiretroviral Therapy"]';
 
@@ -139,22 +139,22 @@ INSERT OR IGNORE INTO medication_instruction_templates (medication_catalog_id, c
 SELECT
     (SELECT id FROM medication_catalog WHERE medication_name = 'Doxycycline'),
     'treatment',
-    'Bacterial Infection',
-    'Take 1 capsule by mouth twice daily for 7 days',
-    '["Take with plenty of water", "May take with food if stomach upset occurs", "Do not take with antacids or dairy products", "Complete full course as prescribed"]',
-    '["May cause increased sensitivity to sunlight", "Do not use in children under 8 years", "Can make birth control pills less effective"]',
+    'Chlamydia Treatment',
+    'Take ONE capsule by mouth twice daily for 7 days.',
+    '["Take with food and full glass of water", "Do NOT lie down for 1 hour after taking (prevents esophageal irritation)", "Missed Dose: Take as soon as remembered; if close to next dose, skip", "Complete FULL 7 days even if feeling better", "Avoid dairy, antacids, iron, calcium, magnesium for 2 hours"]',
+    '["⚠️ Take with food and full glass of water", "⚠️ Do NOT lie down for 1 hour after taking", "⚠️ Complete FULL 7 days even if feeling better", "⚠️ Avoid dairy, antacids, iron for 2 hours", "⚠️ Use sunscreen - increases sun sensitivity"]',
     '7',
-    '["STI Treatment - Chlamydia", "Respiratory Infection", "Skin Infection"]';
+    '["STI Treatment - Chlamydia", "Chlamydia Treatment"]';
 
 INSERT OR IGNORE INTO medication_instruction_templates (medication_catalog_id, context, indication, short_dosing, full_instructions, warnings, day_supply_calculation, common_reasons)
 SELECT
     (SELECT id FROM medication_catalog WHERE medication_name = 'Doxycycline'),
     'prevention',
     'Doxy-PEP (STI Post-Exposure Prophylaxis)',
-    'Take 2 capsules by mouth within 24 hours after sex, then 1 capsule twice daily for 2 days',
-    '["Take first dose within 24 hours after condomless sex", "Take with plenty of water", "May take with food", "Do not take with antacids or dairy"]',
-    '["Only for Doxy-PEP - not for treatment", "Do not use as a substitute for condoms", "May cause increased sensitivity to sunlight"]',
-    '3',
+    'Take TWO tablets (200mg) by mouth within 72 hours AFTER condomless sex. Maximum ONE dose per 24 hours.',
+    '["3-2-1 Rule: 3: Within 3 days (72 hours) of condomless sexual encounter. 2: Take 2 tablets (200 mg total). 1: Just 1 time - no more than one dose per 24-hour period", "Optimal timing: Most effective within first 24 hours", "Take with food and full glass of water", "Do NOT lie down for 1 hour after taking", "Avoid dairy, antacids, iron for 2 hours"]',
+    '["⚠️ Take with food and full glass of water", "⚠️ Do NOT lie down for 1 hour after taking", "⚠️ Does NOT protect against all STIs - use condoms", "⚠️ Avoid dairy, antacids, iron for 2 hours", "⚠️ Use sunscreen - increases sun sensitivity", "⚠️ Doxy-PEP is NOT 100% protective - continue using condoms"]',
+    '1',
     '["Doxy-PEP", "STI Prevention"]';
 
 -- ============================================================================
@@ -165,23 +165,55 @@ INSERT OR IGNORE INTO medication_instruction_templates (medication_catalog_id, c
 SELECT
     (SELECT id FROM medication_catalog WHERE medication_name = 'Bactrim DS'),
     'treatment',
-    'Bacterial Infection',
-    'Take 1 tablet by mouth twice daily',
-    '["Take with plenty of water", "May take with food", "Complete full course as prescribed", "Drink extra fluids to prevent kidney stones"]',
-    '["Severe allergic reactions possible", "May cause low blood sodium", "Not for use in late pregnancy"]',
+    'Urinary Tract Infection',
+    'Take ONE tablet by mouth twice daily for 7 days.',
+    '["Take with or without food (food may reduce stomach upset)", "Hydration: Drink plenty of fluids to prevent kidney stones", "Missed Dose: Take as soon as remembered; if close to next dose, skip and resume schedule", "Complete FULL 7 days even if feeling better"]',
+    '["⚠️ Take with food if stomach upset occurs", "⚠️ Drink plenty of water", "⚠️ Complete FULL 7 days even if feeling better", "⚠️ Avoid high-potassium foods and salt substitutes", "⚠️ Use sunscreen - may increase sun sensitivity"]',
     '7',
-    '["UTI Treatment", "Skin Infection", "Respiratory Infection"]';
+    '["UTI Treatment", "Urinary Tract Infection"]';
 
 INSERT OR IGNORE INTO medication_instruction_templates (medication_catalog_id, context, indication, short_dosing, full_instructions, warnings, day_supply_calculation, common_reasons)
 SELECT
     (SELECT id FROM medication_catalog WHERE medication_name = 'Bactrim DS'),
     'prophylaxis',
     'PCP Prophylaxis',
-    'Take 1 tablet by mouth daily',
-    '["Take at the same time each day", "May take with food", "Drink extra fluids", "Do not skip doses"]',
-    '["Regular blood monitoring required", "May cause low blood cell counts", "Seek care for fever or sore throat"]',
+    'Take ONE tablet by mouth once daily.',
+    '["Take with or without food (food may reduce stomach upset)", "Hydration: Drink plenty of fluids to prevent kidney stones", "Missed Dose: Take as soon as remembered; if close to next dose, skip and resume schedule", "Complete full course even if feeling better"]',
+    '["⚠️ Take with food if stomach upset occurs", "⚠️ Drink plenty of water", "⚠️ Avoid high-potassium foods and salt substitutes", "⚠️ Avoid alcohol", "⚠️ Use sunscreen - may increase sun sensitivity", "⚠️ Report rash, fever, sore throat, unusual bruising/bleeding immediately"]',
     '30',
     '["PCP Prophylaxis", "Pneumocystis Prevention"]';
+
+-- ============================================================================
+-- Insert Additional Bactrim Templates
+-- ============================================================================
+
+-- Bactrim DS (Toxoplasmosis Prophylaxis)
+INSERT OR IGNORE INTO medication_instruction_templates (medication_catalog_id, context, indication, short_dosing, full_instructions, warnings, day_supply_calculation, common_reasons)
+SELECT
+    (SELECT id FROM medication_catalog WHERE medication_name = 'Bactrim DS'),
+    'prophylaxis',
+    'Toxoplasmosis Prevention',
+    'Take ONE tablet by mouth once daily.',
+    '["Take with or without food (food may reduce stomach upset)", "Hydration: Drink plenty of fluids to prevent kidney stones", "Missed Dose: Take as soon as remembered; if close to next dose, skip and resume schedule"]',
+    '["⚠️ Take with food if stomach upset occurs", "⚠️ Drink plenty of water", "⚠️ Avoid high-potassium foods and salt substitutes", "⚠️ Avoid alcohol", "⚠️ Report rash, fever, or unusual bruising immediately"]',
+    '30',
+    '["Toxoplasmosis Prophylaxis", "Toxoplasmosis Prevention"]';
+
+-- ============================================================================
+-- Insert Additional Doxycycline Templates
+-- ============================================================================
+
+-- Doxycycline (Syphilis Treatment)
+INSERT OR IGNORE INTO medication_instruction_templates (medication_catalog_id, context, indication, short_dosing, full_instructions, warnings, day_supply_calculation, common_reasons)
+SELECT
+    (SELECT id FROM medication_catalog WHERE medication_name = 'Doxycycline'),
+    'treatment',
+    'Early Syphilis Treatment',
+    'Take ONE tablet by mouth twice daily for 14 days.',
+    '["Take with food and full glass of water", "Do NOT lie down for 1 hour after taking", "Complete FULL 14 days even if feeling better", "Avoid dairy, antacids, iron for 2 hours"]',
+    '["⚠️ Take with food and full glass of water", "⚠️ Do NOT lie down for 1 hour after taking", "⚠️ Complete FULL 14 days even if feeling better", "⚠️ Avoid dairy, antacids, iron for 2 hours", "⚠️ Follow-up testing required after treatment"]',
+    '14',
+    '["STI Treatment - Syphilis", "Early Syphilis", "Syphilis Treatment"]';
 
 -- ============================================================================
 -- Insert Instruction Templates for Symtuza
@@ -192,9 +224,9 @@ SELECT
     (SELECT id FROM medication_catalog WHERE medication_name = 'Symtuza'),
     'treatment',
     'HIV-1 Infection',
-    'Take 1 tablet by mouth once daily',
-    '["Take with food", "Take at the same time each day", "Do not skip doses - resistance can develop"]',
-    '["Severe exacerbations of Hepatitis B reported if discontinued", "Do not stop without consulting healthcare provider", "Contains sulfa - allergy warning"]',
+    'Take ONE tablet by mouth once daily WITH FOOD.',
+    '["MUST be taken WITH FOOD (essential for absorption)", "Timing: Same time each day", "Tablet splitting: May be split using tablet-cutter; entire dose must be consumed immediately after splitting", "Missed Dose: Take as soon as remembered unless close to next dose; do not double", "Do not miss doses - resistance can develop", "Do not alter dose or discontinue without consulting provider"]',
+    '["⚠️ MUST take WITH FOOD", "⚠️ Do NOT miss doses - resistance can develop", "⚠️ Do NOT stop without talking to doctor", "⚠️ Report rash, fever, or mouth sores immediately", "⚠️ Many drug interactions - check before new meds", "⚠️ Contains sulfa - allergy warning", "⚠️ Severe skin reactions possible - seek immediate care"]',
     '30',
     '["HIV Treatment", "Antiretroviral Therapy"]';
 
@@ -207,9 +239,9 @@ SELECT
     (SELECT id FROM medication_catalog WHERE medication_name = 'Dovato'),
     'treatment',
     'HIV-1 Infection',
-    'Take 1 tablet by mouth once daily',
-    '["May take with or without food", "Take at the same time each day", "Do not skip doses - resistance can develop"]',
-    '["Severe exacerbations of Hepatitis B reported if discontinued", "Do not stop without consulting healthcare provider"]',
+    'Take ONE tablet by mouth once daily at the same time each day.',
+    '["Can be taken with or without food", "Timing: Same time each day", "Missed Dose: If >4 hours until next dose: Take missed dose immediately. If <4 hours until next dose: Skip missed dose, resume regular schedule. Do not double dose", "Polyvalent cation antacids: Take 2 hours AFTER or 6 hours BEFORE Dovato"]',
+    '["⚠️ Take with or without food", "⚠️ Do NOT stop without talking to doctor", "⚠️ Take antacids 2 hrs AFTER or 6 hrs BEFORE", "⚠️ Report signs of allergic reaction immediately", "⚠️ Regular lab monitoring required", "⚠️ Hepatitis B reactivation possible if discontinued"]',
     '30',
     '["HIV Treatment", "Antiretroviral Therapy", "Initial Regimen"]';
 

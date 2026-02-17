@@ -1,6 +1,6 @@
 /**
  * Database Connection Module
- * Initializes better-sqlite3 with healthcare-grade settings
+ * Initializes better-sqlite3 with healthcare-grade settings and field-level encryption
  */
 
 import Database from 'better-sqlite3';
@@ -8,8 +8,19 @@ import { app } from 'electron';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as crypto from 'crypto';
+import log from 'electron-log';
+
+// Import encryption functions from security module
+import {
+  initializeEncryption,
+  isEncryptionConfigured,
+  setupEncryption,
+  unlockEncryption,
+  lockEncryption,
+} from '../security/databaseEncryption';
 
 let db: Database.Database | null = null;
+let isEncryptionInitialized = false;
 
 /**
  * Get the database file path
@@ -20,7 +31,69 @@ export function getDbPath(): string {
 }
 
 /**
- * Initialize the database connection
+ * Initialize encryption system
+ * - Checks if encryption is configured
+ * - Sets up encryption if not (with default password in dev mode)
+ * - Unlocks encryption for use
+ */
+export function initEncryption(): boolean {
+  if (isEncryptionInitialized) {
+    return true;
+  }
+
+  try {
+    // Initialize the encryption storage
+    initializeEncryption();
+
+    // Check if encryption is already configured
+    if (!isEncryptionConfigured()) {
+      log.info('[Database] Encryption not configured - setting up...');
+      
+      // In development, auto-setup with a default password
+      // In production, this should prompt the user
+      const defaultPassword = process.env.HYACINTH_MASTER_PASSWORD || 'hyacinth-dev-password';
+      
+      const { recoveryKey } = setupEncryption(defaultPassword);
+      log.info('[Database] Encryption setup complete');
+      log.info('[Database] IMPORTANT - Recovery key:', recoveryKey);
+      
+      // In production, you should save this recovery key securely
+      if (process.env.NODE_ENV === 'development') {
+        const recoveryPath = path.join(app.getPath('userData'), 'recovery.key');
+        fs.writeFileSync(recoveryPath, recoveryKey, { mode: 0o600 });
+        log.info('[Database] Recovery key saved to:', recoveryPath);
+      }
+    } else {
+      log.info('[Database] Encryption is already configured');
+    }
+
+    // Unlock encryption with the master password
+    const masterPassword = process.env.HYACINTH_MASTER_PASSWORD || 'hyacinth-dev-password';
+    const unlocked = unlockEncryption(masterPassword);
+    
+    if (!unlocked) {
+      log.error('[Database] Failed to unlock encryption - invalid master password?');
+      throw new Error('Failed to unlock database encryption');
+    }
+
+    isEncryptionInitialized = true;
+    log.info('[Database] Encryption initialized and unlocked successfully');
+    return true;
+  } catch (error) {
+    log.error('[Database] Encryption initialization failed:', error);
+    throw error;
+  }
+}
+
+/**
+ * Check if encryption is initialized
+ */
+export function isEncryptionReady(): boolean {
+  return isEncryptionInitialized;
+}
+
+/**
+ * Initialize the database connection with encryption
  */
 export function initDatabase(): Database.Database {
   if (db) {
@@ -35,9 +108,13 @@ export function initDatabase(): Database.Database {
     fs.mkdirSync(dbDir, { recursive: true });
   }
 
+  // Initialize encryption BEFORE opening database
+  // This ensures the encryption key is ready for any data operations
+  initEncryption();
+
   // Open database with recommended settings for healthcare data
   db = new Database(dbPath, {
-    verbose: process.env.NODE_ENV === 'development' ? console.log : undefined,
+    verbose: process.env.NODE_ENV === 'development' ? log.debug : undefined,
     fileMustExist: false,
   });
 
@@ -55,9 +132,11 @@ export function initDatabase(): Database.Database {
     throw new Error(`Database integrity check failed: ${integrityCheck}`);
   }
 
-  console.log(`[Database] Connected to ${dbPath}`);
-  console.log(`[Database] Foreign keys: ${db.pragma('foreign_keys', { simple: true })}`);
-  console.log(`[Database] Journal mode: ${db.pragma('journal_mode', { simple: true })}`);
+  log.info(`[Database] Connected to ${dbPath}`);
+  log.info(`[Database] Database file (persists across relaunches): ${dbPath}`);
+  log.info(`[Database] Foreign keys: ${db.pragma('foreign_keys', { simple: true })}`);
+  log.info(`[Database] Journal mode: ${db.pragma('journal_mode', { simple: true })}`);
+  log.info(`[Database] Encryption: ACTIVE`);
 
   return db;
 }
@@ -77,9 +156,13 @@ export function getDatabase(): Database.Database {
  */
 export function closeDatabase(): void {
   if (db) {
+    // Lock encryption before closing
+    lockEncryption();
+    isEncryptionInitialized = false;
+    
     db.close();
     db = null;
-    console.log('[Database] Connection closed');
+    log.info('[Database] Connection closed and encryption locked');
   }
 }
 
@@ -93,7 +176,7 @@ export function runSchema(): void {
   const schemaPath = path.resolve(__dirname, '..', '..', 'src', 'main', 'database', 'schema.sql');
 
   if (!fs.existsSync(schemaPath)) {
-    console.log('[Database] Schema file not found at:', schemaPath);
+    log.error('[Database] Schema file not found at:', schemaPath);
     return;
   }
 
@@ -114,14 +197,18 @@ export function runSchema(): void {
     try {
       database.exec(statement + ';');
     } catch (err) {
-      // Ignore "already exists" errors
-      if (!((err as Error).message || '').includes('already exists')) {
-        console.log(`[Database] Schema statement error: ${(err as Error).message}`);
+      const errorMessage = (err as Error).message || '';
+      // Ignore "already exists" errors (expected for idempotent schema application)
+      if (errorMessage.includes('already exists')) {
+        continue;
       }
+      // Log and throw for unexpected errors
+      log.error(`[Database] Schema statement error: ${errorMessage}`, { statement });
+      throw new Error(`Failed to apply schema: ${errorMessage}`);
     }
   }
 
-  console.log('[Database] Schema applied successfully');
+  log.info('[Database] Schema applied successfully');
 }
 
 /**
@@ -179,6 +266,11 @@ export function checkDatabaseHealth(): { healthy: boolean; issues: string[] } {
       issues.push(`Foreign key violations: ${fkCheck.length}`);
     }
 
+    // Check encryption status
+    if (!isEncryptionReady()) {
+      issues.push('Encryption not initialized');
+    }
+
     return {
       healthy: issues.length === 0,
       issues
@@ -190,3 +282,11 @@ export function checkDatabaseHealth(): { healthy: boolean; issues: string[] } {
     };
   }
 }
+
+// Re-export encryption functions for convenience
+export {
+  isEncryptionConfigured,
+  setupEncryption,
+  unlockEncryption,
+  lockEncryption,
+} from '../security/databaseEncryption';
