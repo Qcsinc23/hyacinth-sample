@@ -1,6 +1,6 @@
 /**
  * Activity Monitoring Service
- * 
+ *
  * Tracks user actions, session duration, and provides auto-save functionality.
  * Integrates with the audit logging system for comprehensive activity tracking.
  */
@@ -63,7 +63,7 @@ function generateEventId(): string {
 export function startSession(staffId: number, staffName: string): SessionInfo {
   const sessionId = generateSessionId();
   const now = new Date().toISOString();
-  
+
   currentSession = {
     sessionId,
     staffId,
@@ -75,19 +75,21 @@ export function startSession(staffId: number, staffName: string): SessionInfo {
     windowFocusChanges: 0,
     idleTimeMs: 0,
   };
-  
+
   lastActivityTimestamp = Date.now();
   isIdle = false;
-  
-  log.info(`[ActivityMonitor] Session started: ${sessionId} for staff: ${staffName}`);
-  
+
+  log.info(
+    `[ActivityMonitor] Session started: ${sessionId} for staff: ${staffName}`,
+  );
+
   // Log session start
   logActivity('SESSION_START', {
     sessionId,
     staffId,
     staffName,
   });
-  
+
   return currentSession;
 }
 
@@ -98,15 +100,15 @@ export function endSession(): SessionInfo | null {
   if (!currentSession) {
     return null;
   }
-  
+
   const session = { ...currentSession };
   const now = Date.now();
-  
+
   // Calculate final active time
   if (!isIdle) {
     session.totalActiveTimeMs += now - lastActivityTimestamp;
   }
-  
+
   // Log session end
   logActivity('SESSION_END', {
     sessionId: session.sessionId,
@@ -117,12 +119,14 @@ export function endSession(): SessionInfo | null {
     windowFocusChanges: session.windowFocusChanges,
     idleTimeMs: session.idleTimeMs,
   });
-  
-  log.info(`[ActivityMonitor] Session ended: ${session.sessionId}, Duration: ${Math.round(session.totalActiveTimeMs / 1000)}s, Actions: ${session.actionCount}`);
-  
+
+  log.info(
+    `[ActivityMonitor] Session ended: ${session.sessionId}, Duration: ${Math.round(session.totalActiveTimeMs / 1000)}s, Actions: ${session.actionCount}`,
+  );
+
   // Flush buffer
   flushActivityBuffer();
-  
+
   currentSession = null;
   return session;
 }
@@ -134,13 +138,16 @@ export function logActivity(
   action: string,
   details: Record<string, unknown> = {},
   entityType: string | null = null,
-  entityId: number | null = null
+  entityId: number | null = null,
 ): void {
   if (!currentSession) {
-    log.warn('[ActivityMonitor] Activity logged without active session:', action);
+    log.warn(
+      '[ActivityMonitor] Activity logged without active session:',
+      action,
+    );
     return;
   }
-  
+
   const event: ActivityEvent = {
     id: generateEventId(),
     timestamp: new Date().toISOString(),
@@ -152,10 +159,10 @@ export function logActivity(
     details,
     sessionId: currentSession.sessionId,
   };
-  
+
   activityBuffer.push(event);
   currentSession.actionCount++;
-  
+
   // Update last activity time
   const now = Date.now();
   if (!isIdle) {
@@ -164,13 +171,15 @@ export function logActivity(
   currentSession.lastActivityTime = event.timestamp;
   lastActivityTimestamp = now;
   isIdle = false;
-  
+
   // Flush if buffer is full
   if (activityBuffer.length >= MAX_BUFFER_SIZE) {
     flushActivityBuffer();
   }
-  
-  log.verbose(`[ActivityMonitor] Activity: ${action} by ${currentSession.staffName}`);
+
+  log.verbose(
+    `[ActivityMonitor] Activity: ${action} by ${currentSession.staffName}`,
+  );
 }
 
 /**
@@ -178,15 +187,15 @@ export function logActivity(
  */
 export function recordUserActivity(): void {
   if (!currentSession) return;
-  
+
   const now = Date.now();
-  
+
   // If coming back from idle, add idle time
   if (isIdle) {
     const idleDuration = now - lastActivityTimestamp;
     currentSession.idleTimeMs += idleDuration;
     isIdle = false;
-    
+
     logActivity('RETURN_FROM_IDLE', {
       idleDurationMs: idleDuration,
     });
@@ -194,7 +203,7 @@ export function recordUserActivity(): void {
     // Add to active time
     currentSession.totalActiveTimeMs += now - lastActivityTimestamp;
   }
-  
+
   lastActivityTimestamp = now;
   currentSession.lastActivityTime = new Date().toISOString();
 }
@@ -204,20 +213,20 @@ export function recordUserActivity(): void {
  */
 export function checkIdleState(): boolean {
   if (!currentSession || isIdle) return isIdle;
-  
+
   const idleDuration = Date.now() - lastActivityTimestamp;
-  
+
   if (idleDuration >= IDLE_THRESHOLD_MS) {
     isIdle = true;
     currentSession.idleTimeMs += idleDuration;
-    
+
     logActivity('IDLE_DETECTED', {
       idleDurationMs: idleDuration,
     });
-    
+
     return true;
   }
-  
+
   return false;
 }
 
@@ -226,9 +235,9 @@ export function checkIdleState(): boolean {
  */
 export function recordWindowFocusChange(focused: boolean): void {
   if (!currentSession) return;
-  
+
   currentSession.windowFocusChanges++;
-  
+
   logActivity(focused ? 'WINDOW_FOCUS' : 'WINDOW_BLUR', {
     windowFocusCount: currentSession.windowFocusChanges,
   });
@@ -239,12 +248,12 @@ export function recordWindowFocusChange(focused: boolean): void {
  */
 export function getCurrentSession(): SessionInfo | null {
   if (!currentSession) return null;
-  
+
   const now = Date.now();
-  const activeTime = isIdle 
-    ? currentSession.totalActiveTimeMs 
+  const activeTime = isIdle
+    ? currentSession.totalActiveTimeMs
     : currentSession.totalActiveTimeMs + (now - lastActivityTimestamp);
-  
+
   return {
     ...currentSession,
     totalActiveTimeMs: activeTime,
@@ -256,18 +265,22 @@ export function getCurrentSession(): SessionInfo | null {
  */
 function flushActivityBuffer(): void {
   if (activityBuffer.length === 0) return;
-  
+
   // In a real implementation, this would write to the database
   // For now, we log to the console/file
   const events = [...activityBuffer];
   activityBuffer = [];
-  
-  log.info(`[ActivityMonitor] Flushing ${events.length} activities to audit log`);
-  
+
+  log.info(
+    `[ActivityMonitor] Flushing ${events.length} activities to audit log`,
+  );
+
   // Here we would typically call the audit service to persist these events
   // For now, they're logged via electron-log
-  events.forEach(event => {
-    log.verbose(`[Activity] ${event.action} | ${event.staffName} | ${event.timestamp}`);
+  events.forEach((event) => {
+    log.verbose(
+      `[Activity] ${event.action} | ${event.staffName} | ${event.timestamp}`,
+    );
   });
 }
 
@@ -280,31 +293,33 @@ export function autoSave(context: {
   draftId?: number;
 }): void {
   if (!currentSession) return;
-  
+
   logActivity('AUTO_SAVE', {
     formType: context.formType,
     draftId: context.draftId,
     hasUnsavedChanges: true,
   });
-  
+
   log.info(`[ActivityMonitor] Auto-save triggered for ${context.formType}`);
 }
 
 /**
  * Screen lock handler
  */
-export function handleScreenLock(reason: 'timeout' | 'manual' | 'system'): void {
+export function handleScreenLock(
+  reason: 'timeout' | 'manual' | 'system',
+): void {
   if (!currentSession) return;
-  
+
   logActivity('SCREEN_LOCK', {
     reason,
     sessionDurationMs: currentSession.totalActiveTimeMs,
     actionCount: currentSession.actionCount,
   });
-  
+
   // Flush buffer before lock
   flushActivityBuffer();
-  
+
   log.info(`[ActivityMonitor] Screen locked: ${reason}`);
 }
 
@@ -318,7 +333,7 @@ export function getSessionStats(): {
   totalIdleTime: number;
 } | null {
   if (!currentSession) return null;
-  
+
   return {
     totalSessions: 1,
     totalActions: currentSession.actionCount,
@@ -335,21 +350,21 @@ export function setupActivityMonitoring(mainWindow: BrowserWindow): void {
   mainWindow.on('focus', () => {
     recordWindowFocusChange(true);
   });
-  
+
   mainWindow.on('blur', () => {
     recordWindowFocusChange(false);
   });
-  
+
   // Set up periodic buffer flush
   setInterval(() => {
     flushActivityBuffer();
   }, BUFFER_FLUSH_INTERVAL_MS);
-  
+
   // Set up idle checking
   setInterval(() => {
     checkIdleState();
   }, 60000); // Check every minute
-  
+
   log.info('[ActivityMonitor] Activity monitoring initialized');
 }
 

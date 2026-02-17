@@ -5,7 +5,11 @@
 
 import * as bcrypt from 'bcrypt';
 import { getDatabase } from '../db';
-import type { StaffMember, CreateStaffInput, UpdateStaffInput } from '../../../shared/types';
+import type {
+  StaffMember,
+  CreateStaffInput,
+  UpdateStaffInput,
+} from '../../../shared/types';
 
 const SALT_ROUNDS = 12;
 
@@ -28,26 +32,25 @@ export function verifyPin(pin: string, hash: string): boolean {
  */
 export function createStaff(input: CreateStaffInput): StaffMember {
   const db = getDatabase();
-  
+
   const now = new Date().toISOString();
   const pinHash = hashPin(input.pin);
-  
-  const result = db.prepare(`
+
+  const result = db
+    .prepare(
+      `
     INSERT INTO staff_members (
       first_name, last_name, pin_hash, role, is_active, created_at, updated_at
     ) VALUES (?, ?, ?, ?, 1, ?, ?)
-  `).run(
-    input.first_name,
-    input.last_name,
-    pinHash,
-    input.role,
-    now,
-    now
-  );
+  `,
+    )
+    .run(input.first_name, input.last_name, pinHash, input.role, now, now);
 
   const created = getStaffById(Number(result.lastInsertRowid));
   if (!created) {
-    throw new Error('Failed to create staff member: record not found after insert');
+    throw new Error(
+      'Failed to create staff member: record not found after insert',
+    );
   }
   return created;
 }
@@ -57,7 +60,9 @@ export function createStaff(input: CreateStaffInput): StaffMember {
  */
 export function getStaffById(id: number): StaffMember | null {
   const db = getDatabase();
-  return db.prepare('SELECT * FROM staff_members WHERE id = ?').get(id) as StaffMember | null;
+  return db
+    .prepare('SELECT * FROM staff_members WHERE id = ?')
+    .get(id) as StaffMember | null;
 }
 
 /**
@@ -78,10 +83,10 @@ export function getAllStaff(onlyActive = true): StaffMember[] {
  */
 export function updateStaff(id: number, input: UpdateStaffInput): StaffMember {
   const db = getDatabase();
-  
+
   const updates: string[] = [];
   const values: (string | number | boolean | null)[] = [];
-  
+
   if (input.first_name !== undefined) {
     updates.push('first_name = ?');
     values.push(input.first_name);
@@ -102,17 +107,21 @@ export function updateStaff(id: number, input: UpdateStaffInput): StaffMember {
     updates.push('is_active = ?');
     values.push(input.is_active ? 1 : 0);
   }
-  
+
   updates.push('updated_at = ?');
   values.push(new Date().toISOString());
-  
+
   values.push(id);
-  
-  db.prepare(`UPDATE staff_members SET ${updates.join(', ')} WHERE id = ?`).run(...values);
-  
+
+  db.prepare(`UPDATE staff_members SET ${updates.join(', ')} WHERE id = ?`).run(
+    ...values,
+  );
+
   const updated = getStaffById(id);
   if (!updated) {
-    throw new Error(`Failed to update staff member ${id}: record not found after update`);
+    throw new Error(
+      `Failed to update staff member ${id}: record not found after update`,
+    );
   }
   return updated;
 }
@@ -120,28 +129,32 @@ export function updateStaff(id: number, input: UpdateStaffInput): StaffMember {
 /**
  * Verify staff PIN and update last login
  */
-export function verifyStaffPin(pin: string): { success: boolean; staff?: StaffMember } {
+export function verifyStaffPin(pin: string): {
+  success: boolean;
+  staff?: StaffMember;
+} {
   const db = getDatabase();
-  
+
   // Get all active staff members
-  const staffMembers = db.prepare(
-    'SELECT * FROM staff_members WHERE is_active = 1'
-  ).all() as StaffMember[];
-  
+  const staffMembers = db
+    .prepare('SELECT * FROM staff_members WHERE is_active = 1')
+    .all() as StaffMember[];
+
   // Check PIN against each (timing-safe comparison via bcrypt)
   for (const staff of staffMembers) {
     if (verifyPin(pin, staff.pin_hash)) {
       // Update last login
-      db.prepare(
-        'UPDATE staff_members SET last_login_at = ? WHERE id = ?'
-      ).run(new Date().toISOString(), staff.id);
-      
+      db.prepare('UPDATE staff_members SET last_login_at = ? WHERE id = ?').run(
+        new Date().toISOString(),
+        staff.id,
+      );
+
       // Return without the pin_hash for security
       const { pin_hash, ...staffWithoutPin } = staff;
       return { success: true, staff: staffWithoutPin as StaffMember };
     }
   }
-  
+
   return { success: false };
 }
 
@@ -150,11 +163,13 @@ export function verifyStaffPin(pin: string): { success: boolean; staff?: StaffMe
  */
 export function deactivateStaff(id: number): void {
   const db = getDatabase();
-  db.prepare(`
+  db.prepare(
+    `
     UPDATE staff_members 
     SET is_active = 0, updated_at = ? 
     WHERE id = ?
-  `).run(new Date().toISOString(), id);
+  `,
+  ).run(new Date().toISOString(), id);
 }
 
 /**
@@ -162,11 +177,13 @@ export function deactivateStaff(id: number): void {
  */
 export function reactivateStaff(id: number): void {
   const db = getDatabase();
-  db.prepare(`
+  db.prepare(
+    `
     UPDATE staff_members 
     SET is_active = 1, updated_at = ? 
     WHERE id = ?
-  `).run(new Date().toISOString(), id);
+  `,
+  ).run(new Date().toISOString(), id);
 }
 
 /**
@@ -174,9 +191,9 @@ export function reactivateStaff(id: number): void {
  */
 export function isAdmin(staffId: number): boolean {
   const db = getDatabase();
-  const result = db.prepare(
-    'SELECT role FROM staff_members WHERE id = ? AND is_active = 1'
-  ).get(staffId) as { role: string } | undefined;
+  const result = db
+    .prepare('SELECT role FROM staff_members WHERE id = ? AND is_active = 1')
+    .get(staffId) as { role: string } | undefined;
   return result?.role === 'admin';
 }
 
@@ -192,7 +209,11 @@ export function deleteStaff(id: number): void {
  * Change own PIN (authenticated staff only).
  * Verifies current PIN then sets new PIN. Throws if current PIN is wrong.
  */
-export function changeOwnPin(staffId: number, currentPin: string, newPin: string): void {
+export function changeOwnPin(
+  staffId: number,
+  currentPin: string,
+  newPin: string,
+): void {
   const staff = getStaffById(staffId);
   if (!staff) {
     throw new Error('Staff member not found');

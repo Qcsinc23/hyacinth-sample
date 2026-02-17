@@ -1,6 +1,6 @@
 /**
  * Settings Management
- * 
+ *
  * Manages application settings with type safety.
  */
 
@@ -11,27 +11,32 @@ import { DEFAULT_SETTINGS, type Settings } from './defaults';
 /**
  * Get a setting value
  */
-export function getSetting<K extends keyof Settings>(key: K): Settings[K] | null {
+export function getSetting<K extends keyof Settings>(
+  key: K,
+): Settings[K] | null {
   try {
     const db = getDatabase();
     const stmt = db.prepare('SELECT value FROM app_settings WHERE key = ?');
     const result = stmt.get(key) as { value: string } | undefined;
-    
+
     if (!result) {
       // Return default value if exists
       return DEFAULT_SETTINGS[key] ?? null;
     }
-    
+
     // Parse value based on default type
     const defaultValue = DEFAULT_SETTINGS[key];
 
     if (defaultValue === null) {
       return null as Settings[K];
-    } else if (typeof defaultValue === 'boolean') {
+    }
+    if (typeof defaultValue === 'boolean') {
       return (result.value === 'true') as Settings[K];
-    } else if (typeof defaultValue === 'number') {
+    }
+    if (typeof defaultValue === 'number') {
       return parseFloat(result.value) as Settings[K];
-    } else if (Array.isArray(defaultValue) || typeof defaultValue === 'object') {
+    }
+    if (Array.isArray(defaultValue) || typeof defaultValue === 'object') {
       try {
         return JSON.parse(result.value) as Settings[K];
       } catch {
@@ -51,11 +56,11 @@ export function getSetting<K extends keyof Settings>(key: K): Settings[K] | null
  */
 export function setSetting<K extends keyof Settings>(
   key: K,
-  value: Settings[K]
+  value: Settings[K],
 ): boolean {
   try {
     const db = getDatabase();
-    
+
     // Convert value to string for storage
     let stringValue: string;
 
@@ -70,7 +75,7 @@ export function setSetting<K extends keyof Settings>(
     } else {
       stringValue = value as string;
     }
-    
+
     const stmt = db.prepare(`
       INSERT INTO app_settings (key, value, updated_at)
       VALUES (?, ?, ?)
@@ -78,9 +83,9 @@ export function setSetting<K extends keyof Settings>(
         value = excluded.value,
         updated_at = excluded.updated_at
     `);
-    
+
     stmt.run(key, stringValue, new Date().toISOString());
-    
+
     return true;
   } catch (error) {
     log.error(`Failed to set setting ${key}:`, error);
@@ -93,12 +98,12 @@ export function setSetting<K extends keyof Settings>(
  */
 export const getAllSettings = (): Partial<Settings> => {
   const settings: Partial<Settings> = {};
-  
+
   try {
     const db = getDatabase();
     const stmt = db.prepare('SELECT key, value FROM app_settings');
     const rows = stmt.all() as Array<{ key: keyof Settings; value: string }>;
-    
+
     for (const row of rows) {
       const defaultValue = DEFAULT_SETTINGS[row.key];
 
@@ -108,9 +113,14 @@ export const getAllSettings = (): Partial<Settings> => {
         (settings as Record<string, unknown>)[row.key] = row.value === 'true';
       } else if (typeof defaultValue === 'number') {
         (settings as Record<string, unknown>)[row.key] = parseFloat(row.value);
-      } else if (Array.isArray(defaultValue) || typeof defaultValue === 'object') {
+      } else if (
+        Array.isArray(defaultValue) ||
+        typeof defaultValue === 'object'
+      ) {
         try {
-          (settings as Record<string, unknown>)[row.key] = JSON.parse(row.value);
+          (settings as Record<string, unknown>)[row.key] = JSON.parse(
+            row.value,
+          );
         } catch {
           (settings as Record<string, unknown>)[row.key] = defaultValue;
         }
@@ -118,7 +128,7 @@ export const getAllSettings = (): Partial<Settings> => {
         (settings as Record<string, unknown>)[row.key] = row.value;
       }
     }
-    
+
     // Merge with defaults
     return { ...DEFAULT_SETTINGS, ...settings };
   } catch (error) {
@@ -135,7 +145,7 @@ export const resetAllSettings = (): boolean => {
     const db = getDatabase();
     const stmt = db.prepare('DELETE FROM app_settings');
     stmt.run();
-    
+
     log.info('All settings reset to defaults');
     return true;
   } catch (error) {
@@ -152,7 +162,7 @@ export function resetSetting<K extends keyof Settings>(key: K): boolean {
     const db = getDatabase();
     const stmt = db.prepare('DELETE FROM app_settings WHERE key = ?');
     stmt.run(key);
-    
+
     log.info(`Setting ${key} reset to default`);
     return true;
   } catch (error) {
@@ -224,13 +234,13 @@ export const exportSettings = (): string => {
 export const importSettings = (json: string): boolean => {
   try {
     const settings = JSON.parse(json) as Partial<Settings>;
-    
+
     for (const [key, value] of Object.entries(settings)) {
       if (key in DEFAULT_SETTINGS) {
         setSetting(key as keyof Settings, value as Settings[keyof Settings]);
       }
     }
-    
+
     log.info('Settings imported successfully');
     return true;
   } catch (error) {

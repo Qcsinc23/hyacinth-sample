@@ -1,6 +1,6 @@
 /**
  * Database Encryption Module
- * 
+ *
  * Provides field-level encryption for sensitive PHI data using AES-256-GCM.
  * Supports secure key management through OS credential stores.
  */
@@ -30,14 +30,12 @@ export const ENCRYPTED_FIELDS = {
     'address',
     'notes',
   ],
-  staff_members: [
-    'first_name',
-    'last_name',
-  ],
+  staff_members: ['first_name', 'last_name'],
 } as const;
 
 export type EncryptedTable = keyof typeof ENCRYPTED_FIELDS;
-export type EncryptedField<T extends EncryptedTable> = typeof ENCRYPTED_FIELDS[T][number];
+export type EncryptedField<T extends EncryptedTable> =
+  (typeof ENCRYPTED_FIELDS)[T][number];
 
 // Key storage paths
 const getKeyStoragePath = (): string => {
@@ -58,6 +56,7 @@ const getSaltFilePath = (): string => {
  */
 class KeyManager {
   private masterKey: Buffer | null = null;
+
   private dataEncryptionKey: Buffer | null = null;
 
   /**
@@ -96,7 +95,13 @@ class KeyManager {
    * Derive a key from password using PBKDF2
    */
   deriveKeyFromPassword(password: string, salt: Buffer): Buffer {
-    return crypto.pbkdf2Sync(password, salt, PBKDF2_ITERATIONS, KEY_LENGTH, 'sha256');
+    return crypto.pbkdf2Sync(
+      password,
+      salt,
+      PBKDF2_ITERATIONS,
+      KEY_LENGTH,
+      'sha256',
+    );
   }
 
   /**
@@ -107,34 +112,34 @@ class KeyManager {
 
     // Generate new data encryption key
     this.dataEncryptionKey = this.generateDataEncryptionKey();
-    
+
     // Generate salt for password derivation
     const salt = this.generateSalt();
-    
+
     // Derive master key from password
     this.masterKey = this.deriveKeyFromPassword(masterPassword, salt);
-    
+
     // Encrypt the data encryption key with the master key
     const iv = crypto.randomBytes(IV_LENGTH);
     const cipher = crypto.createCipheriv(ALGORITHM, this.masterKey, iv);
-    
+
     let encryptedKey = cipher.update(this.dataEncryptionKey);
     encryptedKey = Buffer.concat([encryptedKey, cipher.final()]);
-    
+
     const authTag = cipher.getAuthTag();
-    
+
     // Store encrypted key (IV + authTag + encryptedData)
     const keyData = Buffer.concat([iv, authTag, encryptedKey]);
     fs.writeFileSync(getKeyFilePath(), keyData, { mode: 0o600 });
-    
+
     // Store salt
     fs.writeFileSync(getSaltFilePath(), salt, { mode: 0o600 });
-    
+
     // Generate recovery key
     const recoveryKey = this.generateRecoveryKey();
-    
+
     log.info('[Encryption] Encryption setup complete');
-    
+
     return { recoveryKey };
   }
 
@@ -149,27 +154,27 @@ class KeyManager {
 
       // Read salt
       const salt = fs.readFileSync(getSaltFilePath());
-      
+
       // Derive master key
       this.masterKey = this.deriveKeyFromPassword(masterPassword, salt);
-      
+
       // Read encrypted data key
       const keyData = fs.readFileSync(getKeyFilePath());
-      
+
       // Extract IV, authTag, and encrypted key
       const iv = keyData.slice(0, IV_LENGTH);
       const authTag = keyData.slice(IV_LENGTH, IV_LENGTH + AUTH_TAG_LENGTH);
       const encryptedKey = keyData.slice(IV_LENGTH + AUTH_TAG_LENGTH);
-      
+
       // Decrypt data encryption key
       const decipher = crypto.createDecipheriv(ALGORITHM, this.masterKey, iv);
       decipher.setAuthTag(authTag);
-      
+
       let decryptedKey = decipher.update(encryptedKey);
       decryptedKey = Buffer.concat([decryptedKey, decipher.final()]);
-      
+
       this.dataEncryptionKey = decryptedKey;
-      
+
       log.info('[Encryption] Encryption unlocked successfully');
       return true;
     } catch (error) {
@@ -185,7 +190,9 @@ class KeyManager {
    */
   getDataEncryptionKey(): Buffer {
     if (!this.dataEncryptionKey) {
-      throw new Error('Encryption not unlocked. Call unlockEncryption() first.');
+      throw new Error(
+        'Encryption not unlocked. Call unlockEncryption() first.',
+      );
     }
     return this.dataEncryptionKey;
   }
@@ -201,31 +208,31 @@ class KeyManager {
       }
 
       const dataKey = this.dataEncryptionKey!;
-      
+
       // Generate new salt
       const newSalt = this.generateSalt();
-      
+
       // Derive new master key
       const newMasterKey = this.deriveKeyFromPassword(newPassword, newSalt);
-      
+
       // Re-encrypt data key with new master key
       const iv = crypto.randomBytes(IV_LENGTH);
       const cipher = crypto.createCipheriv(ALGORITHM, newMasterKey, iv);
-      
+
       let encryptedKey = cipher.update(dataKey);
       encryptedKey = Buffer.concat([encryptedKey, cipher.final()]);
-      
+
       const authTag = cipher.getAuthTag();
-      
+
       // Store updated key data
       const keyData = Buffer.concat([iv, authTag, encryptedKey]);
       fs.writeFileSync(getKeyFilePath(), keyData, { mode: 0o600 });
-      
+
       // Store new salt
       fs.writeFileSync(getSaltFilePath(), newSalt, { mode: 0o600 });
-      
+
       this.masterKey = newMasterKey;
-      
+
       log.info('[Encryption] Master password changed successfully');
       return true;
     } catch (error) {
@@ -316,7 +323,7 @@ export function decryptValue(ciphertext: string | null): string | null {
   try {
     const key = keyManager.getDataEncryptionKey();
     const parts = ciphertext.split(':');
-    
+
     if (parts.length !== 3) {
       throw new Error('Invalid encrypted format');
     }
@@ -351,7 +358,7 @@ export function isEncrypted(value: string | null): boolean {
  */
 export function encryptFields<T extends Record<string, unknown>>(
   data: T,
-  tableName: EncryptedTable
+  tableName: EncryptedTable,
 ): T {
   const fieldsToEncrypt = ENCRYPTED_FIELDS[tableName];
   if (!fieldsToEncrypt) {
@@ -360,7 +367,11 @@ export function encryptFields<T extends Record<string, unknown>>(
 
   const encrypted = { ...data } as Record<string, unknown>;
   for (const field of fieldsToEncrypt) {
-    if (field in encrypted && encrypted[field] !== null && encrypted[field] !== undefined) {
+    if (
+      field in encrypted &&
+      encrypted[field] !== null &&
+      encrypted[field] !== undefined
+    ) {
       const value = String(encrypted[field]);
       if (!isEncrypted(value)) {
         encrypted[field] = encryptValue(value);
@@ -376,7 +387,7 @@ export function encryptFields<T extends Record<string, unknown>>(
  */
 export function decryptFields<T extends Record<string, unknown>>(
   data: T,
-  tableName: EncryptedTable
+  tableName: EncryptedTable,
 ): T {
   const fieldsToEncrypt = ENCRYPTED_FIELDS[tableName];
   if (!fieldsToEncrypt) {
@@ -385,7 +396,11 @@ export function decryptFields<T extends Record<string, unknown>>(
 
   const decrypted = { ...data } as Record<string, unknown>;
   for (const field of fieldsToEncrypt) {
-    if (field in decrypted && decrypted[field] !== null && decrypted[field] !== undefined) {
+    if (
+      field in decrypted &&
+      decrypted[field] !== null &&
+      decrypted[field] !== undefined
+    ) {
       const value = String(decrypted[field]);
       decrypted[field] = decryptValue(value);
     }
@@ -397,28 +412,36 @@ export function decryptFields<T extends Record<string, unknown>>(
 /**
  * Encrypt patient data
  */
-export function encryptPatientData<T extends Record<string, unknown>>(patient: T): T {
+export function encryptPatientData<T extends Record<string, unknown>>(
+  patient: T,
+): T {
   return encryptFields(patient, 'patients');
 }
 
 /**
  * Decrypt patient data
  */
-export function decryptPatientData<T extends Record<string, unknown>>(patient: T): T {
+export function decryptPatientData<T extends Record<string, unknown>>(
+  patient: T,
+): T {
   return decryptFields(patient, 'patients');
 }
 
 /**
  * Encrypt staff data
  */
-export function encryptStaffData<T extends Record<string, unknown>>(staff: T): T {
+export function encryptStaffData<T extends Record<string, unknown>>(
+  staff: T,
+): T {
   return encryptFields(staff, 'staff_members');
 }
 
 /**
  * Decrypt staff data
  */
-export function decryptStaffData<T extends Record<string, unknown>>(staff: T): T {
+export function decryptStaffData<T extends Record<string, unknown>>(
+  staff: T,
+): T {
   return decryptFields(staff, 'staff_members');
 }
 
@@ -446,7 +469,9 @@ export function isEncryptionConfigured(): boolean {
 /**
  * Setup encryption (first-time setup)
  */
-export function setupEncryption(masterPassword: string): { recoveryKey: string } {
+export function setupEncryption(masterPassword: string): {
+  recoveryKey: string;
+} {
   return keyManager.setupEncryption(masterPassword);
 }
 
@@ -460,7 +485,10 @@ export function unlockEncryption(masterPassword: string): boolean {
 /**
  * Change master password
  */
-export function changeMasterPassword(currentPassword: string, newPassword: string): boolean {
+export function changeMasterPassword(
+  currentPassword: string,
+  newPassword: string,
+): boolean {
   return keyManager.changeMasterPassword(currentPassword, newPassword);
 }
 

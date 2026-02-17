@@ -34,4 +34,33 @@ module.exports = {
       '@typescript-eslint/parser': ['.ts', '.tsx'],
     },
   },
+  overrides: [
+    {
+      files: ['src/main/**/*.{js,jsx,ts,tsx}'],
+      env: {
+        node: true,
+      },
+      rules: {
+        'no-use-before-define': 'off',
+        'no-restricted-syntax': 'off',
+        'no-plusplus': 'off',
+        '@typescript-eslint/no-unused-vars': 'warn',
+        'global-require': 'off',
+        'no-continue': 'off',
+        radix: 'off',
+        'class-methods-use-this': 'off',
+        'no-await-in-loop': 'off',
+        'no-undef': 'off',
+        'promise/always-return': 'off',
+        'no-unreachable': 'off',
+        'no-promise-executor-return': 'off',
+        'no-param-reassign': 'off',
+        'no-new': 'off',
+        'import/prefer-default-export': 'off',
+        'default-case': 'off',
+        camelcase: 'off',
+        'import/no-named-as-default-member': 'off',
+      },
+    },
+  ],
 };

@@ -239,16 +239,16 @@ export const IPC_CHANNELS = {
 
 // Type for all channel values
 export type IpcChannel =
-  | typeof PATIENT_CHANNELS[keyof typeof PATIENT_CHANNELS]
-  | typeof STAFF_CHANNELS[keyof typeof STAFF_CHANNELS]
-  | typeof DISPENSING_CHANNELS[keyof typeof DISPENSING_CHANNELS]
-  | typeof INVENTORY_CHANNELS[keyof typeof INVENTORY_CHANNELS]
-  | typeof ALERT_CHANNELS[keyof typeof ALERT_CHANNELS]
-  | typeof AUDIT_CHANNELS[keyof typeof AUDIT_CHANNELS]
-  | typeof DRAFT_CHANNELS[keyof typeof DRAFT_CHANNELS]
-  | typeof DASHBOARD_CHANNELS[keyof typeof DASHBOARD_CHANNELS]
-  | typeof SETTINGS_CHANNELS[keyof typeof SETTINGS_CHANNELS]
-  | typeof DATABASE_CHANNELS[keyof typeof DATABASE_CHANNELS]
-  | typeof REPORTS_CHANNELS[keyof typeof REPORTS_CHANNELS]
-  | typeof PRINT_CHANNELS[keyof typeof PRINT_CHANNELS]
-  | typeof INSTRUCTION_CHANNELS[keyof typeof INSTRUCTION_CHANNELS];
+  | (typeof PATIENT_CHANNELS)[keyof typeof PATIENT_CHANNELS]
+  | (typeof STAFF_CHANNELS)[keyof typeof STAFF_CHANNELS]
+  | (typeof DISPENSING_CHANNELS)[keyof typeof DISPENSING_CHANNELS]
+  | (typeof INVENTORY_CHANNELS)[keyof typeof INVENTORY_CHANNELS]
+  | (typeof ALERT_CHANNELS)[keyof typeof ALERT_CHANNELS]
+  | (typeof AUDIT_CHANNELS)[keyof typeof AUDIT_CHANNELS]
+  | (typeof DRAFT_CHANNELS)[keyof typeof DRAFT_CHANNELS]
+  | (typeof DASHBOARD_CHANNELS)[keyof typeof DASHBOARD_CHANNELS]
+  | (typeof SETTINGS_CHANNELS)[keyof typeof SETTINGS_CHANNELS]
+  | (typeof DATABASE_CHANNELS)[keyof typeof DATABASE_CHANNELS]
+  | (typeof REPORTS_CHANNELS)[keyof typeof REPORTS_CHANNELS]
+  | (typeof PRINT_CHANNELS)[keyof typeof PRINT_CHANNELS]
+  | (typeof INSTRUCTION_CHANNELS)[keyof typeof INSTRUCTION_CHANNELS];

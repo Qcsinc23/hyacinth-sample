@@ -47,11 +47,9 @@ export interface ReceiptOptions {
  */
 export async function generateReceipt(
   data: ReceiptData,
-  options: ReceiptOptions = {}
+  options: ReceiptOptions = {},
 ): Promise<Uint8Array> {
-  const {
-    paperSize = 'letter',
-  } = options;
+  const { paperSize = 'letter' } = options;
 
   try {
     const { width, height } = getPageDimensions(paperSize);
@@ -73,11 +71,13 @@ export async function generateReceipt(
  */
 export async function generateReceiptFromRecord(
   _recordId: number,
-  _options: ReceiptOptions = {}
+  _options: ReceiptOptions = {},
 ): Promise<Uint8Array> {
   // This would fetch the record from the database
   // For now, throw an error indicating it needs database integration
-  throw new Error('Database integration required for record-based receipt generation');
+  throw new Error(
+    'Database integration required for record-based receipt generation',
+  );
 }
 
 /**
@@ -87,7 +87,7 @@ async function drawReceiptContent(
   page: PDFPage,
   data: ReceiptData,
   pdfDoc: PDFDocument,
-  options: ReceiptOptions
+  options: ReceiptOptions,
 ): Promise<void> {
   const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
   const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
@@ -217,12 +217,15 @@ async function drawReceiptContent(
   });
   y -= 14;
 
-  page.drawText(`Date/Time: ${format(data.dispensedAt, 'MM/dd/yyyy hh:mm a')}`, {
-    x: margin,
-    y,
-    font,
-    size: 10,
-  });
+  page.drawText(
+    `Date/Time: ${format(data.dispensedAt, 'MM/dd/yyyy hh:mm a')}`,
+    {
+      x: margin,
+      y,
+      font,
+      size: 10,
+    },
+  );
   y -= 25;
 
   // Horizontal line
@@ -445,7 +448,10 @@ async function drawReceiptContent(
 /**
  * Get page dimensions based on paper size
  */
-function getPageDimensions(paperSize: string): { width: number; height: number } {
+function getPageDimensions(paperSize: string): {
+  width: number;
+  height: number;
+} {
   switch (paperSize) {
     case 'thermal':
       return { width: 288, height: 792 }; // 4" x 11" thermal paper
@@ -462,7 +468,7 @@ function getPageDimensions(paperSize: string): { width: number; height: number }
  */
 export async function saveReceiptToTemp(
   pdfBytes: Uint8Array,
-  filename?: string
+  filename?: string,
 ): Promise<string> {
   const tempDir = app.getPath('temp');
   const finalFilename = filename || `receipt_${Date.now()}.pdf`;
@@ -480,8 +486,8 @@ function wrapText(text: string, maxChars: number): string[] {
   let currentLine = '';
 
   for (const word of words) {
-    if ((currentLine + ' ' + word).trim().length <= maxChars) {
-      currentLine = (currentLine + ' ' + word).trim();
+    if (`${currentLine} ${word}`.trim().length <= maxChars) {
+      currentLine = `${currentLine} ${word}`.trim();
     } else {
       if (currentLine) lines.push(currentLine);
       currentLine = word;
@@ -497,7 +503,7 @@ function wrapText(text: string, maxChars: number): string[] {
  */
 function truncateText(text: string, maxLength: number): string {
   if (text.length <= maxLength) return text;
-  return text.substring(0, maxLength - 3) + '...';
+  return `${text.substring(0, maxLength - 3)}...`;
 }
 
 export default {

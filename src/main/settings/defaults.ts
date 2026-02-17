@@ -1,6 +1,6 @@
 /**
  * Default Settings
- * 
+ *
  * Defines default values for all application settings.
  */
 
@@ -15,7 +15,7 @@ export interface Settings {
   defaultDispenseQuantity: number;
   dateFormat: string;
   timeFormat: string;
-  
+
   // Security Settings
   pinEnabled: boolean;
   pinHash: string | null;
@@ -25,34 +25,34 @@ export interface Settings {
   requirePinForExport: boolean;
   maxLoginAttempts: number;
   lockoutDurationMinutes: number;
-  
+
   // Backup Settings
   backupEnabled: boolean;
   backupIntervalHours: number;
   backupRetentionDays: number;
   lastBackup: string | null;
-  
+
   // Notification Settings
   lowStockAlertsEnabled: boolean;
   expirationAlertsEnabled: boolean;
   alertSoundEnabled: boolean;
   lowStockThreshold: Record<string, number>;
   expirationWarningDays: number;
-  
+
   // Display Settings
   theme: 'light' | 'dark' | 'system';
   sidebarCollapsed: boolean;
   showHelpTooltips: boolean;
-  
+
   // Export Settings
   defaultExportFormat: 'csv' | 'pdf' | 'xlsx';
   csvDelimiter: ',';
   includeHeaderInExport: boolean;
-  
+
   // Integration Settings
   enableAuditLogging: boolean;
   auditLogRetentionDays: number;
-  
+
   // Feature Flags
   enablePatientSearch: boolean;
   enableInventoryImport: boolean;
@@ -70,7 +70,7 @@ export const DEFAULT_SETTINGS: Settings = {
   defaultDispenseQuantity: 30,
   dateFormat: 'MM/dd/yyyy',
   timeFormat: 'HH:mm',
-  
+
   // Security Settings
   pinEnabled: true,
   pinHash: null,
@@ -80,13 +80,13 @@ export const DEFAULT_SETTINGS: Settings = {
   requirePinForExport: true,
   maxLoginAttempts: 5,
   lockoutDurationMinutes: 30,
-  
+
   // Backup Settings
   backupEnabled: true,
   backupIntervalHours: 24,
   backupRetentionDays: 30,
   lastBackup: null,
-  
+
   // Notification Settings
   lowStockAlertsEnabled: true,
   expirationAlertsEnabled: true,
@@ -95,28 +95,28 @@ export const DEFAULT_SETTINGS: Settings = {
     'Biktarvy (nPEP)': 30,
     'Biktarvy (ID)': 30,
     'Biktarvy (PrEP)': 30,
-    'Descovy': 30,
-    'Symtuza': 30,
-    'Dovato': 30,
-    'Bactrim': 20,
-    'Doxycycline': 20,
+    Descovy: 30,
+    Symtuza: 30,
+    Dovato: 30,
+    Bactrim: 20,
+    Doxycycline: 20,
   },
   expirationWarningDays: 30,
-  
+
   // Display Settings
   theme: 'system',
   sidebarCollapsed: false,
   showHelpTooltips: true,
-  
+
   // Export Settings
   defaultExportFormat: 'csv',
   csvDelimiter: ',',
   includeHeaderInExport: true,
-  
+
   // Integration Settings
   enableAuditLogging: true,
   auditLogRetentionDays: 365,
-  
+
   // Feature Flags
   enablePatientSearch: true,
   enableInventoryImport: true,
@@ -160,11 +160,7 @@ export const SETTINGS_CATEGORIES = [
     name: 'Backup',
     description: 'Automatic backup settings',
     icon: 'Database',
-    settings: [
-      'backupEnabled',
-      'backupIntervalHours',
-      'backupRetentionDays',
-    ],
+    settings: ['backupEnabled', 'backupIntervalHours', 'backupRetentionDays'],
   },
   {
     id: 'notifications',
@@ -183,32 +179,21 @@ export const SETTINGS_CATEGORIES = [
     name: 'Display',
     description: 'UI appearance and behavior',
     icon: 'Monitor',
-    settings: [
-      'theme',
-      'sidebarCollapsed',
-      'showHelpTooltips',
-    ],
+    settings: ['theme', 'sidebarCollapsed', 'showHelpTooltips'],
   },
   {
     id: 'export',
     name: 'Export',
     description: 'Export and reporting settings',
     icon: 'FileDown',
-    settings: [
-      'defaultExportFormat',
-      'csvDelimiter',
-      'includeHeaderInExport',
-    ],
+    settings: ['defaultExportFormat', 'csvDelimiter', 'includeHeaderInExport'],
   },
   {
     id: 'audit',
     name: 'Audit Logging',
     description: 'Audit trail and compliance settings',
     icon: 'ClipboardList',
-    settings: [
-      'enableAuditLogging',
-      'auditLogRetentionDays',
-    ],
+    settings: ['enableAuditLogging', 'auditLogRetentionDays'],
   },
 ] as const;
 

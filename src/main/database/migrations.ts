@@ -349,12 +349,12 @@ function ensureMetadataTable(): void {
  */
 export function getCurrentVersion(): number {
   const db = getDatabase();
-  
+
   try {
     ensureMetadataTable();
-    const row = db.prepare(
-      'SELECT version FROM db_metadata WHERE id = 1'
-    ).get() as { version: number } | undefined;
+    const row = db
+      .prepare('SELECT version FROM db_metadata WHERE id = 1')
+      .get() as { version: number } | undefined;
     return row?.version || 0;
   } catch (error) {
     // Table might not exist yet (expected on first run)
@@ -375,16 +375,16 @@ export function getCurrentVersion(): number {
 function setVersion(version: number): void {
   const db = getDatabase();
   ensureMetadataTable();
-  
+
   // Check if row exists
   const exists = db.prepare('SELECT 1 FROM db_metadata WHERE id = 1').get();
   if (exists) {
     db.prepare(
-      'UPDATE db_metadata SET version = ?, updated_at = datetime(\'now\') WHERE id = 1'
+      "UPDATE db_metadata SET version = ?, updated_at = datetime('now') WHERE id = 1",
     ).run(version);
   } else {
     db.prepare(
-      'INSERT INTO db_metadata (id, version, updated_at) VALUES (1, ?, datetime(\'now\'))'
+      "INSERT INTO db_metadata (id, version, updated_at) VALUES (1, ?, datetime('now'))",
     ).run(version);
   }
 }
@@ -394,24 +394,32 @@ function setVersion(version: number): void {
  */
 export function runMigrations(): void {
   const currentVersion = getCurrentVersion();
-  const pendingMigrations = migrations.filter(m => m.version > currentVersion);
+  const pendingMigrations = migrations.filter(
+    (m) => m.version > currentVersion,
+  );
 
   if (pendingMigrations.length === 0) {
-    console.log(`[Migrations] Database is at version ${currentVersion}, no migrations needed`);
+    console.log(
+      `[Migrations] Database is at version ${currentVersion}, no migrations needed`,
+    );
     return;
   }
 
-  console.log(`[Migrations] Running ${pendingMigrations.length} migration(s)...`);
+  console.log(
+    `[Migrations] Running ${pendingMigrations.length} migration(s)...`,
+  );
 
   for (const migration of pendingMigrations) {
-    console.log(`[Migrations] Applying v${migration.version}: ${migration.name}`);
-    
+    console.log(
+      `[Migrations] Applying v${migration.version}: ${migration.name}`,
+    );
+
     const transaction = getDatabase().transaction(() => {
       const db = getDatabase();
-      
+
       // Run migration
       db.exec(migration.up);
-      
+
       // Update version
       setVersion(migration.version);
     });
@@ -428,7 +436,9 @@ export function runMigrations(): void {
  */
 export function needsMigration(): boolean {
   const currentVersion = getCurrentVersion();
-  const pendingCount = migrations.filter(m => m.version > currentVersion).length;
+  const pendingCount = migrations.filter(
+    (m) => m.version > currentVersion,
+  ).length;
   return pendingCount > 0;
 }
 
@@ -441,10 +451,11 @@ export function getMigrationStatus(): {
   pendingCount: number;
 } {
   const currentVersion = getCurrentVersion();
-  const latestVersion = migrations.length > 0 
-    ? Math.max(...migrations.map(m => m.version)) 
-    : 0;
-  const pendingCount = migrations.filter(m => m.version > currentVersion).length;
+  const latestVersion =
+    migrations.length > 0 ? Math.max(...migrations.map((m) => m.version)) : 0;
+  const pendingCount = migrations.filter(
+    (m) => m.version > currentVersion,
+  ).length;
 
   return {
     currentVersion,

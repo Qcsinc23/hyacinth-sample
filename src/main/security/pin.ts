@@ -1,6 +1,6 @@
 /**
  * PIN Security Utilities
- * 
+ *
  * Provides secure PIN hashing and verification using bcrypt.
  */
 
@@ -27,7 +27,10 @@ export const hashPin = async (pin: string): Promise<string> => {
 /**
  * Verify a PIN against a stored hash
  */
-export const verifyPin = async (pin: string, storedHash: string): Promise<boolean> => {
+export const verifyPin = async (
+  pin: string,
+  storedHash: string,
+): Promise<boolean> => {
   try {
     const isValid = await bcrypt.compare(pin, storedHash);
     return isValid;
@@ -44,7 +47,9 @@ export const verifyPin = async (pin: string, storedHash: string): Promise<boolea
  * - Cannot be all the same digit (1111)
  * - Cannot be common patterns
  */
-export const isPinSecure = (pin: string): {
+export const isPinSecure = (
+  pin: string,
+): {
   isValid: boolean;
   message?: string;
 } => {
@@ -55,7 +60,7 @@ export const isPinSecure = (pin: string): {
       message: 'PIN must be 4-6 digits',
     };
   }
-  
+
   // Check if all digits
   if (!/^\d+$/.test(pin)) {
     return {
@@ -63,7 +68,7 @@ export const isPinSecure = (pin: string): {
       message: 'PIN must contain only digits',
     };
   }
-  
+
   // Check for sequential patterns (1234, 2345, etc.)
   const isSequential = (str: string): boolean => {
     for (let i = 1; i < str.length; i++) {
@@ -73,7 +78,7 @@ export const isPinSecure = (pin: string): {
     }
     return true;
   };
-  
+
   // Check for reverse sequential (4321, etc.)
   const isReverseSequential = (str: string): boolean => {
     for (let i = 1; i < str.length; i++) {
@@ -83,44 +88,60 @@ export const isPinSecure = (pin: string): {
     }
     return true;
   };
-  
+
   // Check for all same digits (1111, 2222, etc.)
   const isAllSame = (str: string): boolean => {
     return str.split('').every((char) => char === str[0]);
   };
-  
+
   // Common weak PINs
   const weakPins = [
-    '0000', '1111', '2222', '3333', '4444', '5555', '6666', '7777', '8888', '9999',
-    '1234', '4321', '1212', '6969', '1004', '2000', '2024', '2025',
+    '0000',
+    '1111',
+    '2222',
+    '3333',
+    '4444',
+    '5555',
+    '6666',
+    '7777',
+    '8888',
+    '9999',
+    '1234',
+    '4321',
+    '1212',
+    '6969',
+    '1004',
+    '2000',
+    '2024',
+    '2025',
   ];
-  
+
   if (isAllSame(pin)) {
     return {
       isValid: false,
       message: 'PIN cannot be all the same digit',
     };
   }
-  
+
   if (isSequential(pin) || isReverseSequential(pin)) {
     return {
       isValid: false,
       message: 'PIN cannot be sequential numbers',
     };
   }
-  
+
   if (weakPins.includes(pin)) {
     return {
       isValid: false,
       message: 'PIN is too common. Please choose a more secure PIN.',
     };
   }
-  
+
   // Check for date patterns (MMDD format)
   if (pin.length === 4) {
     const month = parseInt(pin.slice(0, 2));
     const day = parseInt(pin.slice(2, 4));
-    
+
     if (month >= 1 && month <= 12 && day >= 1 && day <= 31) {
       return {
         isValid: false,
@@ -128,7 +149,7 @@ export const isPinSecure = (pin: string): {
       };
     }
   }
-  
+
   return { isValid: true };
 };
 
@@ -136,19 +157,19 @@ export const isPinSecure = (pin: string): {
  * Generate a secure random PIN
  */
 export const generateSecurePin = (length: number = 4): string => {
-  const min = Math.pow(10, length - 1);
-  const max = Math.pow(10, length) - 1;
-  
+  const min = 10 ** (length - 1);
+  const max = 10 ** length - 1;
+
   let pin: string;
   let attempts = 0;
   const maxAttempts = 100;
-  
+
   do {
     const randomNum = Math.floor(Math.random() * (max - min + 1)) + min;
     pin = randomNum.toString();
     attempts++;
   } while (!isPinSecure(pin).isValid && attempts < maxAttempts);
-  
+
   return pin;
 };
 
@@ -157,11 +178,11 @@ export const generateSecurePin = (length: number = 4): string => {
  */
 export const maskPin = (pin: string, revealLast: number = 0): string => {
   if (!pin) return '';
-  
+
   const maskedLength = pin.length - revealLast;
   const masked = '*'.repeat(Math.max(0, maskedLength));
   const revealed = pin.slice(-revealLast);
-  
+
   return masked + revealed;
 };
 
@@ -182,7 +203,9 @@ const LOCKOUT_DURATION_MS = 30 * 60 * 1000; // 30 minutes
 /**
  * Check if PIN entry is rate limited
  */
-export const checkRateLimit = (identifier: string): {
+export const checkRateLimit = (
+  identifier: string,
+): {
   allowed: boolean;
   remainingAttempts: number;
   lockedUntil: number | null;
@@ -190,7 +213,7 @@ export const checkRateLimit = (identifier: string): {
 } => {
   const now = Date.now();
   const entry = rateLimitMap.get(identifier);
-  
+
   if (!entry) {
     return {
       allowed: true,
@@ -198,7 +221,7 @@ export const checkRateLimit = (identifier: string): {
       lockedUntil: null,
     };
   }
-  
+
   // Check if still locked
   if (entry.lockedUntil && now < entry.lockedUntil) {
     const minutesRemaining = Math.ceil((entry.lockedUntil - now) / 60000);
@@ -209,7 +232,7 @@ export const checkRateLimit = (identifier: string): {
       message: `Too many failed attempts. Try again in ${minutesRemaining} minutes.`,
     };
   }
-  
+
   // Reset if lockout has expired
   if (entry.lockedUntil && now >= entry.lockedUntil) {
     rateLimitMap.delete(identifier);
@@ -219,16 +242,16 @@ export const checkRateLimit = (identifier: string): {
       lockedUntil: null,
     };
   }
-  
+
   // Check attempts
   const remainingAttempts = MAX_ATTEMPTS - entry.attempts;
-  
+
   if (remainingAttempts <= 0) {
     // Lock out
     const lockedUntil = now + LOCKOUT_DURATION_MS;
     entry.lockedUntil = lockedUntil;
     rateLimitMap.set(identifier, entry);
-    
+
     return {
       allowed: false,
       remainingAttempts: 0,
@@ -236,7 +259,7 @@ export const checkRateLimit = (identifier: string): {
       message: 'Too many failed attempts. Account locked for 30 minutes.',
     };
   }
-  
+
   return {
     allowed: true,
     remainingAttempts,
@@ -250,7 +273,7 @@ export const checkRateLimit = (identifier: string): {
 export const recordFailedAttempt = (identifier: string): void => {
   const now = Date.now();
   const entry = rateLimitMap.get(identifier);
-  
+
   if (entry) {
     entry.attempts++;
     entry.lastAttempt = now;

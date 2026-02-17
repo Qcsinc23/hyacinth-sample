@@ -48,15 +48,16 @@ export function initEncryption(): boolean {
     // Check if encryption is already configured
     if (!isEncryptionConfigured()) {
       log.info('[Database] Encryption not configured - setting up...');
-      
+
       // In development, auto-setup with a default password
       // In production, this should prompt the user
-      const defaultPassword = process.env.HYACINTH_MASTER_PASSWORD || 'hyacinth-dev-password';
-      
+      const defaultPassword =
+        process.env.HYACINTH_MASTER_PASSWORD || 'hyacinth-dev-password';
+
       const { recoveryKey } = setupEncryption(defaultPassword);
       log.info('[Database] Encryption setup complete');
       log.info('[Database] IMPORTANT - Recovery key:', recoveryKey);
-      
+
       // In production, you should save this recovery key securely
       if (process.env.NODE_ENV === 'development') {
         const recoveryPath = path.join(app.getPath('userData'), 'recovery.key');
@@ -68,11 +69,14 @@ export function initEncryption(): boolean {
     }
 
     // Unlock encryption with the master password
-    const masterPassword = process.env.HYACINTH_MASTER_PASSWORD || 'hyacinth-dev-password';
+    const masterPassword =
+      process.env.HYACINTH_MASTER_PASSWORD || 'hyacinth-dev-password';
     const unlocked = unlockEncryption(masterPassword);
-    
+
     if (!unlocked) {
-      log.error('[Database] Failed to unlock encryption - invalid master password?');
+      log.error(
+        '[Database] Failed to unlock encryption - invalid master password?',
+      );
       throw new Error('Failed to unlock database encryption');
     }
 
@@ -134,8 +138,12 @@ export function initDatabase(): Database.Database {
 
   log.info(`[Database] Connected to ${dbPath}`);
   log.info(`[Database] Database file (persists across relaunches): ${dbPath}`);
-  log.info(`[Database] Foreign keys: ${db.pragma('foreign_keys', { simple: true })}`);
-  log.info(`[Database] Journal mode: ${db.pragma('journal_mode', { simple: true })}`);
+  log.info(
+    `[Database] Foreign keys: ${db.pragma('foreign_keys', { simple: true })}`,
+  );
+  log.info(
+    `[Database] Journal mode: ${db.pragma('journal_mode', { simple: true })}`,
+  );
   log.info(`[Database] Encryption: ACTIVE`);
 
   return db;
@@ -159,7 +167,7 @@ export function closeDatabase(): void {
     // Lock encryption before closing
     lockEncryption();
     isEncryptionInitialized = false;
-    
+
     db.close();
     db = null;
     log.info('[Database] Connection closed and encryption locked');
@@ -173,7 +181,15 @@ export function runSchema(): void {
   const database = getDatabase();
   // Calculate schema path - when running in dev, __dirname is .erb/dll
   // We need to go up to project root and then into src/main/database
-  const schemaPath = path.resolve(__dirname, '..', '..', 'src', 'main', 'database', 'schema.sql');
+  const schemaPath = path.resolve(
+    __dirname,
+    '..',
+    '..',
+    'src',
+    'main',
+    'database',
+    'schema.sql',
+  );
 
   if (!fs.existsSync(schemaPath)) {
     log.error('[Database] Schema file not found at:', schemaPath);
@@ -185,17 +201,17 @@ export function runSchema(): void {
   // Remove comments and split by semicolons
   const cleaned = schema
     .split('\n')
-    .filter(line => !line.trim().startsWith('--'))
+    .filter((line) => !line.trim().startsWith('--'))
     .join('\n');
 
   const statements = cleaned
     .split(';')
-    .map(s => s.trim())
-    .filter(s => s.length > 0);
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
 
   for (const statement of statements) {
     try {
-      database.exec(statement + ';');
+      database.exec(`${statement};`);
     } catch (err) {
       const errorMessage = (err as Error).message || '';
       // Ignore "already exists" errors (expected for idempotent schema application)
@@ -203,7 +219,9 @@ export function runSchema(): void {
         continue;
       }
       // Log and throw for unexpected errors
-      log.error(`[Database] Schema statement error: ${errorMessage}`, { statement });
+      log.error(`[Database] Schema statement error: ${errorMessage}`, {
+        statement,
+      });
       throw new Error(`Failed to apply schema: ${errorMessage}`);
     }
   }
@@ -214,7 +232,10 @@ export function runSchema(): void {
 /**
  * Calculate SHA-256 checksum for audit log
  */
-export function calculateChecksum(data: string, previousChecksum?: string): string {
+export function calculateChecksum(
+  data: string,
+  previousChecksum?: string,
+): string {
   const hash = crypto.createHash('sha256');
   hash.update(data);
   if (previousChecksum) {
@@ -228,9 +249,9 @@ export function calculateChecksum(data: string, previousChecksum?: string): stri
  */
 export function getLastChecksum(): string | null {
   const database = getDatabase();
-  const row = database.prepare(
-    'SELECT checksum FROM audit_log ORDER BY id DESC LIMIT 1'
-  ).get() as { checksum: string } | undefined;
+  const row = database
+    .prepare('SELECT checksum FROM audit_log ORDER BY id DESC LIMIT 1')
+    .get() as { checksum: string } | undefined;
   return row?.checksum || null;
 }
 
@@ -258,9 +279,14 @@ export function checkDatabaseHealth(): { healthy: boolean; issues: string[] } {
     }
 
     // Check foreign keys
-    const fkCheck = database.prepare(
-      'PRAGMA foreign_key_check'
-    ).all() as Array<{ table: string; rowid: number; parent: string; fkid: number }>;
+    const fkCheck = database
+      .prepare('PRAGMA foreign_key_check')
+      .all() as Array<{
+      table: string;
+      rowid: number;
+      parent: string;
+      fkid: number;
+    }>;
 
     if (fkCheck.length > 0) {
       issues.push(`Foreign key violations: ${fkCheck.length}`);
@@ -273,12 +299,12 @@ export function checkDatabaseHealth(): { healthy: boolean; issues: string[] } {
 
     return {
       healthy: issues.length === 0,
-      issues
+      issues,
     };
   } catch (error) {
     return {
       healthy: false,
-      issues: [`Database error: ${(error as Error).message}`]
+      issues: [`Database error: ${(error as Error).message}`],
     };
   }
 }

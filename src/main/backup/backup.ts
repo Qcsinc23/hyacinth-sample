@@ -1,6 +1,6 @@
 /**
  * Backup Creation
- * 
+ *
  * Creates database backups with verification.
  */
 
@@ -33,28 +33,28 @@ export const createBackup = async (
   options?: {
     compress?: boolean;
     verify?: boolean;
-  }
+  },
 ): Promise<string> => {
   const compress = options?.compress ?? true;
   const verify = options?.verify ?? true;
-  
+
   const db = getDatabase();
-  
+
   // Generate backup filename
   const timestamp = format(new Date(), 'yyyy-MM-dd_HH-mm-ss');
   const filename = `hyacinth_backup_${timestamp}.db${compress ? '.gz' : ''}`;
   const backupPath = path.join(backupDir, filename);
-  
+
   log.info(`Starting backup: ${filename}`);
-  
+
   try {
     const tempBackupPath = path.join(backupDir, `temp_backup_${timestamp}.db`);
-    
+
     // Create backup using SQLite VACUUM INTO
     db.exec(`VACUUM INTO '${tempBackupPath}'`);
-    
+
     let finalPath = tempBackupPath;
-    
+
     // Compress if requested
     if (compress) {
       await compressFile(tempBackupPath, backupPath);
@@ -65,36 +65,36 @@ export const createBackup = async (
       fs.renameSync(tempBackupPath, backupPath);
       finalPath = backupPath;
     }
-    
+
     // Generate checksum
     const checksum = await generateFileChecksum(finalPath);
-    
+
     // Write checksum to file
     const checksumPath = `${finalPath}.sha256`;
     fs.writeFileSync(checksumPath, checksum);
-    
+
     // Verify backup if requested
     if (verify) {
       const isValid = await verifyBackup(finalPath, checksum);
       if (!isValid) {
         throw new Error('Backup verification failed');
       }
-      
+
       // Create verification marker
       const verifiedPath = `${finalPath}.verified`;
       fs.writeFileSync(verifiedPath, new Date().toISOString());
-      
+
       log.info('Backup verified successfully');
     }
-    
+
     const stats = fs.statSync(finalPath);
-    
+
     log.info(`Backup completed: ${filename} (${formatBytes(stats.size)})`);
-    
+
     return finalPath;
   } catch (error) {
     log.error('Backup creation failed:', error);
-    
+
     // Clean up any partial files
     try {
       if (fs.existsSync(backupPath)) {
@@ -103,7 +103,7 @@ export const createBackup = async (
     } catch {
       // Ignore cleanup errors
     }
-    
+
     throw error;
   }
 };
@@ -111,11 +111,14 @@ export const createBackup = async (
 /**
  * Compress a file using gzip
  */
-const compressFile = async (sourcePath: string, destPath: string): Promise<void> => {
+const compressFile = async (
+  sourcePath: string,
+  destPath: string,
+): Promise<void> => {
   const source = fs.createReadStream(sourcePath);
   const destination = fs.createWriteStream(destPath);
   const gzip = createGzip();
-  
+
   await pipeline(source, gzip, destination);
 };
 
@@ -126,7 +129,7 @@ export const generateFileChecksum = (filePath: string): Promise<string> => {
   return new Promise((resolve, reject) => {
     const hash = createHash('sha256');
     const stream = fs.createReadStream(filePath);
-    
+
     stream.on('error', reject);
     stream.on('data', (chunk) => hash.update(chunk));
     stream.on('end', () => resolve(hash.digest('hex')));
@@ -138,7 +141,7 @@ export const generateFileChecksum = (filePath: string): Promise<string> => {
  */
 export const verifyBackup = async (
   backupPath: string,
-  expectedChecksum?: string
+  expectedChecksum?: string,
 ): Promise<boolean> => {
   try {
     // Check if file exists
@@ -146,7 +149,7 @@ export const verifyBackup = async (
       log.error('Backup file not found');
       return false;
     }
-    
+
     // Read expected checksum from file if not provided
     let checksum = expectedChecksum;
     if (!checksum) {
@@ -155,27 +158,29 @@ export const verifyBackup = async (
         checksum = fs.readFileSync(checksumPath, 'utf-8').trim();
       }
     }
-    
+
     if (checksum) {
       const actualChecksum = await generateFileChecksum(backupPath);
-      
+
       if (actualChecksum !== checksum) {
         log.error('Backup checksum mismatch');
         return false;
       }
     }
-    
+
     // Try to open as SQLite database to verify structure
     // For compressed files, we'd need to decompress first
     if (!backupPath.endsWith('.gz')) {
       try {
-        const testDb = require('better-sqlite3')(backupPath, { readonly: true });
-        
+        const testDb = require('better-sqlite3')(backupPath, {
+          readonly: true,
+        });
+
         // Verify critical tables exist
-        const tables = testDb.prepare(
-          "SELECT name FROM sqlite_master WHERE type='table'"
-        ).all() as Array<{ name: string }>;
-        
+        const tables = testDb
+          .prepare("SELECT name FROM sqlite_master WHERE type='table'")
+          .all() as Array<{ name: string }>;
+
         const requiredTables = [
           'patients',
           'staff_members',
@@ -188,12 +193,14 @@ export const verifyBackup = async (
           'audit_log',
           'app_settings',
         ];
-        
+
         const tableNames = tables.map((t) => t.name);
-        const hasAllTables = requiredTables.every((t) => tableNames.includes(t));
-        
+        const hasAllTables = requiredTables.every((t) =>
+          tableNames.includes(t),
+        );
+
         testDb.close();
-        
+
         if (!hasAllTables) {
           log.error('Backup missing required tables');
           return false;
@@ -203,7 +210,7 @@ export const verifyBackup = async (
         return false;
       }
     }
-    
+
     return true;
   } catch (error) {
     log.error('Backup verification failed:', error);
@@ -216,18 +223,20 @@ export const verifyBackup = async (
  */
 const formatBytes = (bytes: number): string => {
   if (bytes === 0) return '0 Bytes';
-  
+
   const k = 1024;
   const sizes = ['Bytes', 'KB', 'MB', 'GB'];
   const i = Math.floor(Math.log(bytes) / Math.log(k));
-  
-  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(2))} ${sizes[i]}`;
+
+  return `${parseFloat((bytes / k ** i).toFixed(2))} ${sizes[i]}`;
 };
 
 /**
  * Get backup info
  */
-export const getBackupInfo = (backupPath: string): {
+export const getBackupInfo = (
+  backupPath: string,
+): {
   exists: boolean;
   size: number;
   createdAt: string | null;
@@ -244,16 +253,16 @@ export const getBackupInfo = (backupPath: string): {
         verified: false,
       };
     }
-    
+
     const stats = fs.statSync(backupPath);
     const checksumPath = `${backupPath}.sha256`;
     const verifiedPath = `${backupPath}.verified`;
-    
+
     let checksum: string | null = null;
     if (fs.existsSync(checksumPath)) {
       checksum = fs.readFileSync(checksumPath, 'utf-8').trim();
     }
-    
+
     return {
       exists: true,
       size: stats.size,

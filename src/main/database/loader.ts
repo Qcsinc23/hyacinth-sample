@@ -71,9 +71,9 @@ export function isMedicationCatalogSeeded(): boolean {
   const db = getDatabase();
 
   try {
-    const row = db.prepare(
-      'SELECT COUNT(*) as count FROM medication_catalog'
-    ).get() as { count: number };
+    const row = db
+      .prepare('SELECT COUNT(*) as count FROM medication_catalog')
+      .get() as { count: number };
 
     return row.count > 0;
   } catch {
@@ -90,16 +90,31 @@ export function isInventorySeeded(): boolean {
   try {
     // Check for any of the new medications in inventory
     const newMedications = [
-      'Biktarvy', 'Descovy', 'Doxycycline', 'Bactrim DS', 'Symtuza',
-      'Dovato', 'Tivicay', 'Truvada', 'Juluca', 'Cabenuva', 'Apretude',
-      'Emtricitabine', 'Tenofovir DF', 'Azithromycin', 'Ceftriaxone',
-      'Penicillin G Benzathine', 'Valacyclovir'
+      'Biktarvy',
+      'Descovy',
+      'Doxycycline',
+      'Bactrim DS',
+      'Symtuza',
+      'Dovato',
+      'Tivicay',
+      'Truvada',
+      'Juluca',
+      'Cabenuva',
+      'Apretude',
+      'Emtricitabine',
+      'Tenofovir DF',
+      'Azithromycin',
+      'Ceftriaxone',
+      'Penicillin G Benzathine',
+      'Valacyclovir',
     ];
 
     const placeholders = newMedications.map(() => '?').join(',');
-    const row = db.prepare(
-      `SELECT COUNT(*) as count FROM inventory WHERE medication_name IN (${placeholders})`
-    ).get(...newMedications) as { count: number };
+    const row = db
+      .prepare(
+        `SELECT COUNT(*) as count FROM inventory WHERE medication_name IN (${placeholders})`,
+      )
+      .get(...newMedications) as { count: number };
 
     console.log(`[Loader] Inventory seeded: ${row.count} items found`);
     return row.count > 0;
@@ -115,7 +130,9 @@ export function isInventorySeeded(): boolean {
 export function getInventoryCount(): number {
   const db = getDatabase();
   try {
-    const row = db.prepare('SELECT COUNT(*) as count FROM inventory').get() as { count: number };
+    const row = db.prepare('SELECT COUNT(*) as count FROM inventory').get() as {
+      count: number;
+    };
     return row.count;
   } catch {
     return 0;
@@ -130,19 +147,25 @@ export function getInventoryCount(): number {
 function ensureDefaultAdmin(): void {
   const db = getDatabase();
 
-  const adminCount = db.prepare(
-    'SELECT COUNT(*) as count FROM staff_members WHERE role = ? AND is_active = 1'
-  ).get('admin') as { count: number };
+  const adminCount = db
+    .prepare(
+      'SELECT COUNT(*) as count FROM staff_members WHERE role = ? AND is_active = 1',
+    )
+    .get('admin') as { count: number };
 
   if (adminCount.count === 0) {
     const now = new Date().toISOString();
     const pinHash = hashPin('1234');
-    db.prepare(`
+    db.prepare(
+      `
       INSERT INTO staff_members (
         first_name, last_name, pin_hash, role, is_active, created_at, updated_at
       ) VALUES (?, ?, ?, ?, 1, ?, ?)
-    `).run('System', 'Administrator', pinHash, 'admin', now, now);
-    console.log('[Loader] Created default admin (PIN: 1234). Change this after first login.');
+    `,
+    ).run('System', 'Administrator', pinHash, 'admin', now, now);
+    console.log(
+      '[Loader] Created default admin (PIN: 1234). Change this after first login.',
+    );
   }
 }
 
@@ -210,8 +233,18 @@ export function getDatabaseStatus(): {
   let templateCount = 0;
 
   try {
-    medicationCount = (db.prepare('SELECT COUNT(*) as count FROM medication_catalog').get() as { count: number }).count;
-    templateCount = (db.prepare('SELECT COUNT(*) as count FROM medication_instruction_templates').get() as { count: number }).count;
+    medicationCount = (
+      db.prepare('SELECT COUNT(*) as count FROM medication_catalog').get() as {
+        count: number;
+      }
+    ).count;
+    templateCount = (
+      db
+        .prepare(
+          'SELECT COUNT(*) as count FROM medication_instruction_templates',
+        )
+        .get() as { count: number }
+    ).count;
   } catch {
     // Tables might not exist yet
   }
@@ -257,7 +290,7 @@ export function resetDatabase(): void {
     'db_metadata',
   ];
 
-  tables.forEach(table => {
+  tables.forEach((table) => {
     try {
       db.prepare(`DROP TABLE IF EXISTS ${table}`).run();
     } catch (error) {

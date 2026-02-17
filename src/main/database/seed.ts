@@ -63,12 +63,14 @@ const DEFAULT_MEDICATIONS = [
   {
     name: 'Doxycycline (14 count)',
     commonDosing: '1 capsule PO BID',
-    instructions: 'Take one capsule by mouth twice daily. Take with plenty of fluids.',
+    instructions:
+      'Take one capsule by mouth twice daily. Take with plenty of fluids.',
   },
   {
     name: 'Doxycycline (30 count)',
     commonDosing: '1 capsule PO BID',
-    instructions: 'Take one capsule by mouth twice daily. Take with plenty of fluids.',
+    instructions:
+      'Take one capsule by mouth twice daily. Take with plenty of fluids.',
   },
 ];
 
@@ -114,9 +116,9 @@ export function runSeedData(): void {
   }
   const db = getDatabase();
   const now = new Date().toISOString();
-  
+
   console.log('[Seed] Starting seed data...');
-  
+
   db.transaction(() => {
     // Seed default medications
     console.log('[Seed] Seeding medications...');
@@ -125,11 +127,11 @@ export function runSeedData(): void {
         medication_name, usage_count, short_dosing, full_instructions, is_promoted, created_at, updated_at
       ) VALUES (?, 0, ?, ?, 1, ?, ?)
     `);
-    
+
     for (const med of DEFAULT_MEDICATIONS) {
       medStmt.run(med.name, med.commonDosing, med.instructions, now, now);
     }
-    
+
     // Seed default reasons
     console.log('[Seed] Seeding reasons...');
     const reasonStmt = db.prepare(`
@@ -137,38 +139,41 @@ export function runSeedData(): void {
         reason_name, usage_count, is_promoted, created_at, updated_at
       ) VALUES (?, 0, 1, ?, ?)
     `);
-    
+
     for (const reason of DEFAULT_REASONS) {
       reasonStmt.run(reason, now, now);
     }
-    
+
     // Seed default admin staff
     console.log('[Seed] Seeding admin staff...');
-    const existingAdmin = db.prepare('SELECT id FROM staff_members WHERE role = ?').get('admin') as { id: number } | undefined;
-    
+    const existingAdmin = db
+      .prepare('SELECT id FROM staff_members WHERE role = ?')
+      .get('admin') as { id: number } | undefined;
+
     if (!existingAdmin) {
       const pinHash = hashPin('1234');
-      db.prepare(`
+      db.prepare(
+        `
         INSERT INTO staff_members (
           first_name, last_name, pin_hash, role, is_active, created_at, updated_at
         ) VALUES (?, ?, ?, ?, 1, ?, ?)
-      `).run('System', 'Administrator', pinHash, 'admin', now, now);
+      `,
+      ).run('System', 'Administrator', pinHash, 'admin', now, now);
       console.log('[Seed] Created default admin (PIN: 1234)');
     }
-    
+
     // Seed default settings
     console.log('[Seed] Seeding app settings...');
     const settingStmt = db.prepare(`
       INSERT OR IGNORE INTO app_settings (key, value, updated_at)
       VALUES (?, ?, ?)
     `);
-    
+
     for (const [key, value] of Object.entries(DEFAULT_SETTINGS)) {
       settingStmt.run(key, value, now);
     }
-    
   })();
-  
+
   console.log('[Seed] Seed data complete');
 }
 
@@ -177,6 +182,8 @@ export function runSeedData(): void {
  */
 export function hasSeedData(): boolean {
   const db = getDatabase();
-  const adminCount = db.prepare('SELECT COUNT(*) as count FROM staff_members WHERE role = ?').get('admin') as { count: number };
+  const adminCount = db
+    .prepare('SELECT COUNT(*) as count FROM staff_members WHERE role = ?')
+    .get('admin') as { count: number };
   return adminCount.count > 0;
 }

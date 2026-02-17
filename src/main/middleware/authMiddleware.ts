@@ -35,8 +35,9 @@ export function isAuthenticated(): boolean {
 
   // Check if session has expired
   const now = new Date();
-  const timeSinceLastActivity = now.getTime() - currentSession.lastActivity.getTime();
-  
+  const timeSinceLastActivity =
+    now.getTime() - currentSession.lastActivity.getTime();
+
   if (timeSinceLastActivity > sessionTimeoutMs) {
     // Session expired
     clearSession();
@@ -117,8 +118,13 @@ export function getSessionTimeout(): number {
 // Authentication Wrapper for IPC Handlers
 // ============================================================================
 
-export type IpcHandler<T = unknown> = (event: IpcMainInvokeEvent, ...args: any[]) => T | Promise<T>;
-export type IpcHandlerWithoutEvent<T = unknown> = (...args: any[]) => T | Promise<T>;
+export type IpcHandler<T = unknown> = (
+  event: IpcMainInvokeEvent,
+  ...args: any[]
+) => T | Promise<T>;
+export type IpcHandlerWithoutEvent<T = unknown> = (
+  ...args: any[]
+) => T | Promise<T>;
 
 /**
  * Unauthorized response constant
@@ -133,9 +139,12 @@ const UNAUTHORIZED_RESPONSE: IpcResponse<never> = {
  * Returns { success: false, error: 'Unauthorized' } if not authenticated
  */
 export function requireAuth<T>(
-  handler: IpcHandlerWithoutEvent<T>
+  handler: IpcHandlerWithoutEvent<T>,
 ): IpcHandler<IpcResponse<T>> {
-  return async (_event: IpcMainInvokeEvent, ...args: any[]): Promise<IpcResponse<T>> => {
+  return async (
+    _event: IpcMainInvokeEvent,
+    ...args: any[]
+  ): Promise<IpcResponse<T>> => {
     if (!isAuthenticated()) {
       console.warn('[Auth] Unauthorized IPC call blocked');
       return UNAUTHORIZED_RESPONSE;
@@ -161,9 +170,12 @@ export function requireAuth<T>(
  * Wrap an IPC handler that needs the staff ID from the session
  */
 export function requireAuthWithStaff<T>(
-  handler: (staffId: number, ...args: any[]) => T | Promise<T>
+  handler: (staffId: number, ...args: any[]) => T | Promise<T>,
 ): IpcHandler<IpcResponse<T>> {
-  return async (_event: IpcMainInvokeEvent, ...args: any[]): Promise<IpcResponse<T>> => {
+  return async (
+    _event: IpcMainInvokeEvent,
+    ...args: any[]
+  ): Promise<IpcResponse<T>> => {
     if (!isAuthenticated()) {
       console.warn('[Auth] Unauthorized IPC call blocked');
       return UNAUTHORIZED_RESPONSE;
@@ -205,9 +217,12 @@ export function isAdmin(): boolean {
  * Wrap an IPC handler that requires admin privileges
  */
 export function requireAdmin<T>(
-  handler: IpcHandlerWithoutEvent<T>
+  handler: IpcHandlerWithoutEvent<T>,
 ): IpcHandler<IpcResponse<T>> {
-  return async (_event: IpcMainInvokeEvent, ...args: any[]): Promise<IpcResponse<T>> => {
+  return async (
+    _event: IpcMainInvokeEvent,
+    ...args: any[]
+  ): Promise<IpcResponse<T>> => {
     if (!isAuthenticated()) {
       console.warn('[Auth] Unauthorized IPC call blocked');
       return UNAUTHORIZED_RESPONSE;

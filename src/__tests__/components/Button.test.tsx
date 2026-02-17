@@ -4,6 +4,7 @@
  */
 
 import { render, screen, fireEvent } from '../test-utils';
+import userEvent from '@testing-library/user-event';
 import { Button } from '../../renderer/components/common/Button';
 
 describe('Button', () => {
@@ -216,13 +217,13 @@ describe('Button', () => {
       expect(button.className).toContain('focus:ring-2');
     });
 
-    it('should be keyboard accessible', () => {
+    it('should be keyboard accessible', async () => {
       const handleClick = jest.fn();
       render(<Button onClick={handleClick}>Keyboard</Button>);
       const button = screen.getByRole('button');
       
       button.focus();
-      fireEvent.keyDown(button, { key: 'Enter' });
+      await userEvent.keyboard('{Enter}');
       expect(handleClick).toHaveBeenCalled();
     });
   });

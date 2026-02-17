@@ -4,33 +4,42 @@
  */
 
 import { getDatabase } from '../db';
-import type { Patient, CreatePatientInput, UpdatePatientInput, SearchResult } from '../../../shared/types';
+import type {
+  Patient,
+  CreatePatientInput,
+  UpdatePatientInput,
+  SearchResult,
+} from '../../../shared/types';
 
 /**
  * Create a new patient
  */
 export function createPatient(input: CreatePatientInput): Patient {
   const db = getDatabase();
-  
+
   const now = new Date().toISOString();
-  
-  const result = db.prepare(`
+
+  const result = db
+    .prepare(
+      `
     INSERT INTO patients (
       chart_number, first_name, last_name, dob, phone, email, address, notes,
       is_active, created_at, updated_at
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
-  `).run(
-    input.chart_number,
-    input.first_name,
-    input.last_name,
-    input.dob,
-    input.phone || null,
-    input.email || null,
-    input.address || null,
-    input.notes || null,
-    now,
-    now
-  );
+  `,
+    )
+    .run(
+      input.chart_number,
+      input.first_name,
+      input.last_name,
+      input.dob,
+      input.phone || null,
+      input.email || null,
+      input.address || null,
+      input.notes || null,
+      now,
+      now,
+    );
 
   const created = getPatientById(Number(result.lastInsertRowid));
   if (!created) {
@@ -44,7 +53,9 @@ export function createPatient(input: CreatePatientInput): Patient {
  */
 export function getPatientById(id: number): Patient | null {
   const db = getDatabase();
-  return db.prepare('SELECT * FROM patients WHERE id = ?').get(id) as Patient | null;
+  return db
+    .prepare('SELECT * FROM patients WHERE id = ?')
+    .get(id) as Patient | null;
 }
 
 /**
@@ -52,7 +63,9 @@ export function getPatientById(id: number): Patient | null {
  */
 export function getPatientByChartNumber(chartNumber: string): Patient | null {
   const db = getDatabase();
-  return db.prepare('SELECT * FROM patients WHERE chart_number = ?').get(chartNumber) as Patient | null;
+  return db
+    .prepare('SELECT * FROM patients WHERE chart_number = ?')
+    .get(chartNumber) as Patient | null;
 }
 
 /**
@@ -60,10 +73,10 @@ export function getPatientByChartNumber(chartNumber: string): Patient | null {
  */
 export function updatePatient(id: number, input: UpdatePatientInput): Patient {
   const db = getDatabase();
-  
+
   const updates: string[] = [];
   const values: (string | number | boolean | null)[] = [];
-  
+
   if (input.chart_number !== undefined) {
     updates.push('chart_number = ?');
     values.push(input.chart_number);
@@ -100,17 +113,21 @@ export function updatePatient(id: number, input: UpdatePatientInput): Patient {
     updates.push('is_active = ?');
     values.push(input.is_active ? 1 : 0);
   }
-  
+
   updates.push('updated_at = ?');
   values.push(new Date().toISOString());
-  
+
   values.push(id);
-  
-  db.prepare(`UPDATE patients SET ${updates.join(', ')} WHERE id = ?`).run(...values);
-  
+
+  db.prepare(`UPDATE patients SET ${updates.join(', ')} WHERE id = ?`).run(
+    ...values,
+  );
+
   const updated = getPatientById(id);
   if (!updated) {
-    throw new Error(`Failed to update patient ${id}: record not found after update`);
+    throw new Error(
+      `Failed to update patient ${id}: record not found after update`,
+    );
   }
   return updated;
 }
@@ -120,11 +137,13 @@ export function updatePatient(id: number, input: UpdatePatientInput): Patient {
  */
 export function deactivatePatient(id: number): void {
   const db = getDatabase();
-  db.prepare(`
+  db.prepare(
+    `
     UPDATE patients 
     SET is_active = 0, updated_at = ? 
     WHERE id = ?
-  `).run(new Date().toISOString(), id);
+  `,
+  ).run(new Date().toISOString(), id);
 }
 
 /**
@@ -132,34 +151,38 @@ export function deactivatePatient(id: number): void {
  */
 export function reactivatePatient(id: number): void {
   const db = getDatabase();
-  db.prepare(`
+  db.prepare(
+    `
     UPDATE patients 
     SET is_active = 1, updated_at = ? 
     WHERE id = ?
-  `).run(new Date().toISOString(), id);
+  `,
+  ).run(new Date().toISOString(), id);
 }
 
 /**
  * Search patients with pagination
  */
-export function searchPatients(options: {
-  page?: number;
-  pageSize?: number;
-  search?: string;
-  onlyActive?: boolean;
-  sortBy?: string;
-  sortOrder?: 'asc' | 'desc';
-} = {}): SearchResult<Patient> {
+export function searchPatients(
+  options: {
+    page?: number;
+    pageSize?: number;
+    search?: string;
+    onlyActive?: boolean;
+    sortBy?: string;
+    sortOrder?: 'asc' | 'desc';
+  } = {},
+): SearchResult<Patient> {
   const db = getDatabase();
-  
+
   const page = options.page || 1;
   const pageSize = options.pageSize || 20;
   const search = options.search?.trim();
   const offset = (page - 1) * pageSize;
-  
+
   let whereClause = 'WHERE 1=1';
   const params: (string | number)[] = [];
-  
+
   if (search) {
     whereClause += ` AND (
       first_name LIKE ? OR 
@@ -170,27 +193,39 @@ export function searchPatients(options: {
     const searchPattern = `%${search}%`;
     params.push(searchPattern, searchPattern, searchPattern, searchPattern);
   }
-  
+
   if (options.onlyActive !== false) {
     whereClause += ' AND is_active = 1';
   }
-  
+
   // Get total count
-  const countResult = db.prepare(`SELECT COUNT(*) as total FROM patients ${whereClause}`).get(...params) as { total: number };
-  
+  const countResult = db
+    .prepare(`SELECT COUNT(*) as total FROM patients ${whereClause}`)
+    .get(...params) as { total: number };
+
   // Get data
-  const sortColumn = ['first_name', 'last_name', 'chart_number', 'dob', 'created_at'].includes(options.sortBy || '')
+  const sortColumn = [
+    'first_name',
+    'last_name',
+    'chart_number',
+    'dob',
+    'created_at',
+  ].includes(options.sortBy || '')
     ? options.sortBy
     : 'last_name';
   const sortOrder = options.sortOrder === 'desc' ? 'DESC' : 'ASC';
-  
-  const data = db.prepare(`
+
+  const data = db
+    .prepare(
+      `
     SELECT * FROM patients 
     ${whereClause}
     ORDER BY ${sortColumn} ${sortOrder}, first_name ASC
     LIMIT ? OFFSET ?
-  `).all(...params, pageSize, offset) as Patient[];
-  
+  `,
+    )
+    .all(...params, pageSize, offset) as Patient[];
+
   return {
     data,
     total: countResult.total,
@@ -204,17 +239,24 @@ export function searchPatients(options: {
  */
 export function getActivePatients(): Patient[] {
   const db = getDatabase();
-  return db.prepare(`
+  return db
+    .prepare(
+      `
     SELECT * FROM patients 
     WHERE is_active = 1 
     ORDER BY last_name, first_name
-  `).all() as Patient[];
+  `,
+    )
+    .all() as Patient[];
 }
 
 /**
  * Check if chart number is available
  */
-export function isChartNumberAvailable(chartNumber: string, excludeId?: number): boolean {
+export function isChartNumberAvailable(
+  chartNumber: string,
+  excludeId?: number,
+): boolean {
   const db = getDatabase();
   let query = 'SELECT id FROM patients WHERE chart_number = ?';
   const params: (string | number)[] = [chartNumber];
@@ -246,10 +288,15 @@ export interface PatientDispensingHistory {
 /**
  * Get patient's full dispensing history
  */
-export function getPatientDispensingHistory(patientId: number, limit = 100): PatientDispensingHistory[] {
+export function getPatientDispensingHistory(
+  patientId: number,
+  limit = 100,
+): PatientDispensingHistory[] {
   const db = getDatabase();
 
-  const records = db.prepare(`
+  const records = db
+    .prepare(
+      `
     SELECT 
       dr.id as recordId,
       dr.dispensing_date as dispensingDate,
@@ -262,32 +309,42 @@ export function getPatientDispensingHistory(patientId: number, limit = 100): Pat
     WHERE dr.patient_id = ?
     ORDER BY dr.dispensing_date DESC, dr.dispensing_time DESC
     LIMIT ?
-  `).all(patientId, limit) as any[];
+  `,
+    )
+    .all(patientId, limit) as any[];
 
   const result: PatientDispensingHistory[] = [];
 
   for (const record of records) {
     // Get medications for this record
-    const medications = db.prepare(`
+    const medications = db
+      .prepare(
+        `
       SELECT medication_name 
       FROM dispensing_line_items 
       WHERE record_id = ?
-    `).all(record.recordId) as Array<{ medication_name: string }>;
+    `,
+      )
+      .all(record.recordId) as Array<{ medication_name: string }>;
 
     // Get reasons for this record
-    const reasons = db.prepare(`
+    const reasons = db
+      .prepare(
+        `
       SELECT reason_name 
       FROM record_reasons 
       WHERE record_id = ?
-    `).all(record.recordId) as Array<{ reason_name: string }>;
+    `,
+      )
+      .all(record.recordId) as Array<{ reason_name: string }>;
 
     result.push({
       recordId: record.recordId,
       dispensingDate: record.dispensingDate,
       dispensingTime: record.dispensingTime,
       staffName: record.staffName,
-      medications: medications.map(m => m.medication_name),
-      reasons: reasons.map(r => r.reason_name),
+      medications: medications.map((m) => m.medication_name),
+      reasons: reasons.map((r) => r.reason_name),
       status: record.status,
       notes: record.notes,
     });
@@ -307,10 +364,14 @@ export interface PatientMedicationSummary {
 /**
  * Get patient's medication summary
  */
-export function getPatientMedicationSummary(patientId: number): PatientMedicationSummary[] {
+export function getPatientMedicationSummary(
+  patientId: number,
+): PatientMedicationSummary[] {
   const db = getDatabase();
 
-  return db.prepare(`
+  return db
+    .prepare(
+      `
     SELECT 
       dli.medication_name as medicationName,
       COUNT(DISTINCT dr.id) as totalDispenses,
@@ -321,7 +382,9 @@ export function getPatientMedicationSummary(patientId: number): PatientMedicatio
     WHERE dr.patient_id = ? AND dr.status = 'completed'
     GROUP BY dli.medication_name
     ORDER BY lastDispensed DESC
-  `).all(patientId) as PatientMedicationSummary[];
+  `,
+    )
+    .all(patientId) as PatientMedicationSummary[];
 }
 
 /**
@@ -330,11 +393,15 @@ export function getPatientMedicationSummary(patientId: number): PatientMedicatio
 export function getLastDispensedDate(patientId: number): string | null {
   const db = getDatabase();
 
-  const result = db.prepare(`
+  const result = db
+    .prepare(
+      `
     SELECT MAX(dispensing_date) as lastDate
     FROM dispensing_records
     WHERE patient_id = ? AND status = 'completed'
-  `).get(patientId) as { lastDate: string | null } | undefined;
+  `,
+    )
+    .get(patientId) as { lastDate: string | null } | undefined;
 
   return result?.lastDate || null;
 }
@@ -352,10 +419,14 @@ export interface MedicationTimelineEvent {
 /**
  * Get patient's medication timeline
  */
-export function getPatientMedicationTimeline(patientId: number): MedicationTimelineEvent[] {
+export function getPatientMedicationTimeline(
+  patientId: number,
+): MedicationTimelineEvent[] {
   const db = getDatabase();
 
-  return db.prepare(`
+  return db
+    .prepare(
+      `
     SELECT 
       dr.dispensing_date as date,
       dr.dispensing_time as time,
@@ -371,5 +442,7 @@ export function getPatientMedicationTimeline(patientId: number): MedicationTimel
     WHERE dr.patient_id = ?
     GROUP BY dr.id, dli.id
     ORDER BY dr.dispensing_date DESC, dr.dispensing_time DESC
-  `).all(patientId) as MedicationTimelineEvent[];
+  `,
+    )
+    .all(patientId) as MedicationTimelineEvent[];
 }

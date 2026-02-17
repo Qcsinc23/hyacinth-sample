@@ -46,10 +46,14 @@ export interface InstructionTemplate {
 /**
  * Get medications that have instruction templates for a specific context
  */
-export function getMedicationsByContext(context: ReasonContext): MedicationCatalogEntry[] {
+export function getMedicationsByContext(
+  context: ReasonContext,
+): MedicationCatalogEntry[] {
   const db = getDatabase();
-  
-  const results = db.prepare(`
+
+  const results = db
+    .prepare(
+      `
     SELECT DISTINCT 
       mc.id,
       mc.medication_name as medicationName,
@@ -69,7 +73,9 @@ export function getMedicationsByContext(context: ReasonContext): MedicationCatal
       AND mc.is_active = 1 
       AND mit.is_active = 1
     ORDER BY mc.medication_name
-  `).all(context) as Array<{
+  `,
+    )
+    .all(context) as Array<{
     id: number;
     medicationName: string;
     genericName: string | null;
@@ -84,7 +90,7 @@ export function getMedicationsByContext(context: ReasonContext): MedicationCatal
     isActive: number;
   }>;
 
-  return results.map(r => ({
+  return results.map((r) => ({
     id: r.id,
     medicationName: r.medicationName,
     genericName: r.genericName,
@@ -105,11 +111,13 @@ export function getMedicationsByContext(context: ReasonContext): MedicationCatal
  */
 export function getInstructionTemplateForMedication(
   medicationName: string,
-  context: ReasonContext
+  context: ReasonContext,
 ): InstructionTemplate | null {
   const db = getDatabase();
-  
-  const result = db.prepare(`
+
+  const result = db
+    .prepare(
+      `
     SELECT 
       mit.id,
       mit.medication_catalog_id as medicationCatalogId,
@@ -131,21 +139,25 @@ export function getInstructionTemplateForMedication(
       AND mit.is_active = 1
       AND mc.is_active = 1
     LIMIT 1
-  `).get(medicationName, context) as {
-    id: number;
-    medicationCatalogId: number;
-    medicationName: string;
-    strength: string | null;
-    defaultUnit: string;
-    context: ReasonContext;
-    indication: string;
-    shortDosing: string;
-    fullInstructions: string;
-    warnings: string;
-    daySupplyCalculation: string;
-    commonReasons: string;
-    isActive: number;
-  } | undefined;
+  `,
+    )
+    .get(medicationName, context) as
+    | {
+        id: number;
+        medicationCatalogId: number;
+        medicationName: string;
+        strength: string | null;
+        defaultUnit: string;
+        context: ReasonContext;
+        indication: string;
+        shortDosing: string;
+        fullInstructions: string;
+        warnings: string;
+        daySupplyCalculation: string;
+        commonReasons: string;
+        isActive: number;
+      }
+    | undefined;
 
   if (!result) {
     return null;
@@ -171,10 +183,14 @@ export function getInstructionTemplateForMedication(
 /**
  * Get all instruction templates for a medication (all contexts)
  */
-export function getTemplatesForMedication(medicationName: string): InstructionTemplate[] {
+export function getTemplatesForMedication(
+  medicationName: string,
+): InstructionTemplate[] {
   const db = getDatabase();
-  
-  const results = db.prepare(`
+
+  const results = db
+    .prepare(
+      `
     SELECT 
       mit.id,
       mit.medication_catalog_id as medicationCatalogId,
@@ -195,7 +211,9 @@ export function getTemplatesForMedication(medicationName: string): InstructionTe
       AND mit.is_active = 1
       AND mc.is_active = 1
     ORDER BY mit.context
-  `).all(medicationName) as Array<{
+  `,
+    )
+    .all(medicationName) as Array<{
     id: number;
     medicationCatalogId: number;
     medicationName: string;
@@ -211,7 +229,7 @@ export function getTemplatesForMedication(medicationName: string): InstructionTe
     isActive: number;
   }>;
 
-  return results.map(r => ({
+  return results.map((r) => ({
     id: r.id,
     medicationCatalogId: r.medicationCatalogId,
     medicationName: r.medicationName,
@@ -231,10 +249,14 @@ export function getTemplatesForMedication(medicationName: string): InstructionTe
 /**
  * Get contexts available for a medication
  */
-export function getContextsForMedication(medicationName: string): ReasonContext[] {
+export function getContextsForMedication(
+  medicationName: string,
+): ReasonContext[] {
   const db = getDatabase();
-  
-  const results = db.prepare(`
+
+  const results = db
+    .prepare(
+      `
     SELECT DISTINCT mit.context
     FROM medication_instruction_templates mit
     JOIN medication_catalog mc ON mit.medication_catalog_id = mc.id
@@ -242,9 +264,11 @@ export function getContextsForMedication(medicationName: string): ReasonContext[
       AND mit.is_active = 1
       AND mc.is_active = 1
     ORDER BY mit.context
-  `).all(medicationName) as Array<{ context: ReasonContext }>;
+  `,
+    )
+    .all(medicationName) as Array<{ context: ReasonContext }>;
 
-  return results.map(r => r.context);
+  return results.map((r) => r.context);
 }
 
 /**
@@ -252,8 +276,10 @@ export function getContextsForMedication(medicationName: string): ReasonContext[
  */
 export function getAllMedicationsFromCatalog(): MedicationCatalogEntry[] {
   const db = getDatabase();
-  
-  const results = db.prepare(`
+
+  const results = db
+    .prepare(
+      `
     SELECT 
       id,
       medication_name as medicationName,
@@ -270,7 +296,9 @@ export function getAllMedicationsFromCatalog(): MedicationCatalogEntry[] {
     FROM medication_catalog
     WHERE is_active = 1
     ORDER BY medication_name
-  `).all() as Array<{
+  `,
+    )
+    .all() as Array<{
     id: number;
     medicationName: string;
     genericName: string | null;
@@ -285,7 +313,7 @@ export function getAllMedicationsFromCatalog(): MedicationCatalogEntry[] {
     isActive: number;
   }>;
 
-  return results.map(r => ({
+  return results.map((r) => ({
     id: r.id,
     medicationName: r.medicationName,
     genericName: r.genericName,

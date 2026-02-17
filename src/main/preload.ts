@@ -77,7 +77,8 @@ const electronAPI = {
   staff: {
     verify: (pin: string) => invoke(STAFF_CHANNELS.VERIFY_PIN, pin),
     get: (id: number) => invoke(STAFF_CHANNELS.GET, id),
-    getAll: (onlyActive?: boolean) => invoke(STAFF_CHANNELS.GET_ALL, onlyActive),
+    getAll: (onlyActive?: boolean) =>
+      invoke(STAFF_CHANNELS.GET_ALL, onlyActive),
     add: (data: any) => invoke(STAFF_CHANNELS.CREATE, data),
     update: (id: number, data: any) => invoke(STAFF_CHANNELS.UPDATE, id, data),
     changeOwnPin: (currentPin: string, newPin: string) =>
@@ -90,13 +91,18 @@ const electronAPI = {
   // Patient API
   patient: {
     search: (query: string) => invoke(PATIENT_CHANNELS.SEARCH, query),
-    getByChart: (chartNumber: string) => invoke(PATIENT_CHANNELS.GET_BY_CHART, chartNumber),
+    getByChart: (chartNumber: string) =>
+      invoke(PATIENT_CHANNELS.GET_BY_CHART, chartNumber),
     getById: (id: number) => invoke(PATIENT_CHANNELS.GET, id),
     create: (data: any) => invoke(PATIENT_CHANNELS.CREATE, data),
-    getDispensingHistory: (id: number) => invoke(PATIENT_CHANNELS.GET_DISPENSING_HISTORY, id),
-    getMedicationSummary: (id: number) => invoke(PATIENT_CHANNELS.GET_MEDICATION_SUMMARY, id),
-    getLastDispensedDate: (id: number) => invoke(PATIENT_CHANNELS.GET_LAST_DISPENSED_DATE, id),
-    getMedicationTimeline: (id: number) => invoke(PATIENT_CHANNELS.GET_MEDICATION_TIMELINE, id),
+    getDispensingHistory: (id: number) =>
+      invoke(PATIENT_CHANNELS.GET_DISPENSING_HISTORY, id),
+    getMedicationSummary: (id: number) =>
+      invoke(PATIENT_CHANNELS.GET_MEDICATION_SUMMARY, id),
+    getLastDispensedDate: (id: number) =>
+      invoke(PATIENT_CHANNELS.GET_LAST_DISPENSED_DATE, id),
+    getMedicationTimeline: (id: number) =>
+      invoke(PATIENT_CHANNELS.GET_MEDICATION_TIMELINE, id),
   },
 
   // Medication API (using inventory channels for medication list)
@@ -107,20 +113,29 @@ const electronAPI = {
 
   // Inventory API
   inventory: {
-    getByMedication: (medicationName: string) => invoke(INVENTORY_CHANNELS.GET_BY_MEDICATION, medicationName),
-    getLotDetails: (inventoryId: number) => invoke(INVENTORY_CHANNELS.GET, inventoryId),
+    getByMedication: (medicationName: string) =>
+      invoke(INVENTORY_CHANNELS.GET_BY_MEDICATION, medicationName),
+    getLotDetails: (inventoryId: number) =>
+      invoke(INVENTORY_CHANNELS.GET, inventoryId),
     receive: (data: any) => invoke(INVENTORY_CHANNELS.RECEIVE, data),
     adjust: (data: any) => invoke(INVENTORY_CHANNELS.ADJUST, data),
     getAll: () => invoke('inventory:getAllMedications'),
-    getAllLots: (options?: { page?: number; pageSize?: number; search?: string }) =>
-      invoke(INVENTORY_CHANNELS.SEARCH, options || {}),
+    getAllLots: (options?: {
+      page?: number;
+      pageSize?: number;
+      search?: string;
+    }) => invoke(INVENTORY_CHANNELS.SEARCH, options || {}),
     search: (options?: { page?: number; pageSize?: number; search?: string }) =>
       invoke(INVENTORY_CHANNELS.SEARCH, options || {}),
     getDashboard: () => invoke(DASHBOARD_CHANNELS.GET_STATS),
-    getLotsByMedication: (medicationName: string) => invoke(INVENTORY_CHANNELS.GET_LOTS_BY_MEDICATION, medicationName),
-    getLotByNumber: (lotNumber: string) => invoke(INVENTORY_CHANNELS.GET_LOT_BY_NUMBER, lotNumber),
-    validateLot: (lotId: number, quantity: number) => invoke(INVENTORY_CHANNELS.VALIDATE_LOT, lotId, quantity),
-    getAvailableLots: (medicationName: string) => invoke(INVENTORY_CHANNELS.GET_AVAILABLE_LOTS, medicationName),
+    getLotsByMedication: (medicationName: string) =>
+      invoke(INVENTORY_CHANNELS.GET_LOTS_BY_MEDICATION, medicationName),
+    getLotByNumber: (lotNumber: string) =>
+      invoke(INVENTORY_CHANNELS.GET_LOT_BY_NUMBER, lotNumber),
+    validateLot: (lotId: number, quantity: number) =>
+      invoke(INVENTORY_CHANNELS.VALIDATE_LOT, lotId, quantity),
+    getAvailableLots: (medicationName: string) =>
+      invoke(INVENTORY_CHANNELS.GET_AVAILABLE_LOTS, medicationName),
   },
 
   // Dispensing API
@@ -128,7 +143,7 @@ const electronAPI = {
     create: (data: any) => invoke(DISPENSING_CHANNELS.CREATE, data),
     getAll: (filters: any) => invoke(DISPENSING_CHANNELS.SEARCH, filters),
     getById: (id: number) => invoke(DISPENSING_CHANNELS.GET, id),
-    void: (data: { record_id: number; voided_by: number; reason: string }) => 
+    void: (data: { record_id: number; voided_by: number; reason: string }) =>
       invoke(DISPENSING_CHANNELS.VOID, {
         record_id: data.record_id,
         staff_id: data.voided_by,
@@ -138,43 +153,58 @@ const electronAPI = {
 
   // Alerts API
   alerts: {
-    get: (resolved?: boolean) => resolved 
-      ? invoke(ALERT_CHANNELS.GET_ALL)
-      : invoke(ALERT_CHANNELS.GET_ACTIVE),
-    resolve: (alertId: number, resolvedBy: number) => invoke(ALERT_CHANNELS.ACKNOWLEDGE, alertId, resolvedBy),
+    get: (resolved?: boolean) =>
+      resolved
+        ? invoke(ALERT_CHANNELS.GET_ALL)
+        : invoke(ALERT_CHANNELS.GET_ACTIVE),
+    resolve: (alertId: number, resolvedBy: number) =>
+      invoke(ALERT_CHANNELS.ACKNOWLEDGE, alertId, resolvedBy),
     check: () => invoke(ALERT_CHANNELS.GET_COUNTS),
   },
 
   // Reports API
   reports: {
-    dailySummary: (date: string) => invoke(REPORTS_CHANNELS.DAILY_SUMMARY, date),
+    dailySummary: (date: string) =>
+      invoke(REPORTS_CHANNELS.DAILY_SUMMARY, date),
     inventoryUsage: () => invoke(REPORTS_CHANNELS.INVENTORY_USAGE),
     expiration: (days: number) => invoke(REPORTS_CHANNELS.EXPIRATION, days),
-    staffActivity: (staffId: string | null, dateRange: { from: string; to: string }) => 
-      invoke(REPORTS_CHANNELS.STAFF_ACTIVITY, { staffId, dateRange }),
-    reconciliation: (date: string) => invoke(REPORTS_CHANNELS.RECONCILIATION, date),
-    patientHistory: (patientId: number) => invoke(DISPENSING_CHANNELS.GET_BY_PATIENT, patientId),
+    staffActivity: (
+      staffId: string | null,
+      dateRange: { from: string; to: string },
+    ) => invoke(REPORTS_CHANNELS.STAFF_ACTIVITY, { staffId, dateRange }),
+    reconciliation: (date: string) =>
+      invoke(REPORTS_CHANNELS.RECONCILIATION, date),
+    patientHistory: (patientId: number) =>
+      invoke(DISPENSING_CHANNELS.GET_BY_PATIENT, patientId),
   },
 
   // Drafts API
   drafts: {
-    save: (draftType: string, data: any, userId?: number) => invoke(DRAFT_CHANNELS.SAVE, { type: draftType, data, staffId: userId }),
-    get: (_draftType: string, userId?: number) => invoke(DRAFT_CHANNELS.GET_BY_STAFF, userId),
-    delete: (draftType: string, userId?: number) => invoke(DRAFT_CHANNELS.DELETE_BY_TYPE, draftType, userId),
+    save: (draftType: string, data: any, userId?: number) =>
+      invoke(DRAFT_CHANNELS.SAVE, { type: draftType, data, staffId: userId }),
+    get: (_draftType: string, userId?: number) =>
+      invoke(DRAFT_CHANNELS.GET_BY_STAFF, userId),
+    delete: (draftType: string, userId?: number) =>
+      invoke(DRAFT_CHANNELS.DELETE_BY_TYPE, draftType, userId),
   },
 
   // Print API
   print: {
-    label: (data: any, options?: any) => invoke(PRINT_CHANNELS.LABEL, data, options),
-    receipt: (data: any, options?: any) => invoke(PRINT_CHANNELS.RECEIPT, data, options),
-    labelSheet: (labels: any[], options?: any) => invoke(PRINT_CHANNELS.LABEL_SHEET, labels, options),
-    qrCode: (data: any, options?: any) => invoke(PRINT_CHANNELS.QR_CODE, data, options),
+    label: (data: any, options?: any) =>
+      invoke(PRINT_CHANNELS.LABEL, data, options),
+    receipt: (data: any, options?: any) =>
+      invoke(PRINT_CHANNELS.RECEIPT, data, options),
+    labelSheet: (labels: any[], options?: any) =>
+      invoke(PRINT_CHANNELS.LABEL_SHEET, labels, options),
+    qrCode: (data: any, options?: any) =>
+      invoke(PRINT_CHANNELS.QR_CODE, data, options),
     preview: (filePath: string) => invoke(PRINT_CHANNELS.PREVIEW, filePath),
     getQueue: () => invoke(PRINT_CHANNELS.GET_QUEUE),
     getHistory: (limit?: number) => invoke(PRINT_CHANNELS.GET_HISTORY, limit),
     cancelJob: (jobId: string) => invoke(PRINT_CHANNELS.CANCEL_JOB, jobId),
     clearHistory: () => invoke(PRINT_CHANNELS.CLEAR_HISTORY),
-    exportHistory: (filePath: string) => invoke(PRINT_CHANNELS.EXPORT_HISTORY, filePath),
+    exportHistory: (filePath: string) =>
+      invoke(PRINT_CHANNELS.EXPORT_HISTORY, filePath),
   },
 
   // App Lock API
@@ -197,11 +227,13 @@ const electronAPI = {
 
   // Backup API
   backup: {
-    create: (options?: { compress?: boolean; verify?: boolean }) => 
+    create: (options?: { compress?: boolean; verify?: boolean }) =>
       invoke<BackupCreateResult>('backup:create', options),
     list: () => invoke<BackupListItem[]>('backup:list'),
-    preview: (path: string) => invoke<BackupPreviewResult>('backup:preview', path),
-    restore: (path: string) => invoke<BackupRestoreResult>('backup:restore', path),
+    preview: (path: string) =>
+      invoke<BackupPreviewResult>('backup:preview', path),
+    restore: (path: string) =>
+      invoke<BackupRestoreResult>('backup:restore', path),
     rollback: () => invoke<BackupRollbackResult>('backup:rollback'),
     import: () => invoke<BackupImportResult>('backup:import'),
     selectLocation: () => invoke<string | null>('backup:selectLocation'),
@@ -210,7 +242,8 @@ const electronAPI = {
   // Settings API
   settings: {
     get: (key: string) => invoke(SETTINGS_CHANNELS.GET, key),
-    set: (key: string, value: string) => invoke(SETTINGS_CHANNELS.SET, { key, value }),
+    set: (key: string, value: string) =>
+      invoke(SETTINGS_CHANNELS.SET, { key, value }),
     getAll: () => invoke(SETTINGS_CHANNELS.GET_ALL),
     export: (type: string) => ipcRenderer.invoke('settings:export', type),
     import: (type: string) => ipcRenderer.invoke('settings:import', type),
@@ -218,14 +251,19 @@ const electronAPI = {
 
   // Instruction API
   instruction: {
-    getMedicationsByContext: (context: string) => invoke(INSTRUCTION_CHANNELS.GET_MEDICATIONS_BY_CONTEXT, context),
+    getMedicationsByContext: (context: string) =>
+      invoke(INSTRUCTION_CHANNELS.GET_MEDICATIONS_BY_CONTEXT, context),
     getTemplateForMedication: (medicationName: string, context: string) =>
-      invoke(INSTRUCTION_CHANNELS.GET_TEMPLATE_FOR_MEDICATION, { medicationName, context }),
+      invoke(INSTRUCTION_CHANNELS.GET_TEMPLATE_FOR_MEDICATION, {
+        medicationName,
+        context,
+      }),
     getTemplatesForMedication: (medicationName: string) =>
       invoke(INSTRUCTION_CHANNELS.GET_TEMPLATES_FOR_MEDICATION, medicationName),
     getContextsForMedication: (medicationName: string) =>
       invoke(INSTRUCTION_CHANNELS.GET_CONTEXTS_FOR_MEDICATION, medicationName),
-    getAllMedicationsCatalog: () => invoke(INSTRUCTION_CHANNELS.GET_ALL_MEDICATIONS_CATALOG),
+    getAllMedicationsCatalog: () =>
+      invoke(INSTRUCTION_CHANNELS.GET_ALL_MEDICATIONS_CATALOG),
   },
 
   // Database API

@@ -11,7 +11,13 @@ import { app } from 'electron';
 import log from 'electron-log';
 
 // Reason context type
-export type ReasonContext = 'treatment' | 'prevention' | 'prophylaxis' | 'pep' | 'prep' | 'other';
+export type ReasonContext =
+  | 'treatment'
+  | 'prevention'
+  | 'prophylaxis'
+  | 'pep'
+  | 'prep'
+  | 'other';
 
 export interface ReceiptData {
   patientName: string;
@@ -68,7 +74,7 @@ export async function generateReceipt(data: ReceiptData): Promise<Uint8Array> {
 async function drawReceiptContent(
   page: PDFPage,
   data: ReceiptData,
-  pdfDoc: PDFDocument
+  pdfDoc: PDFDocument,
 ): Promise<void> {
   const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
   const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
@@ -76,7 +82,8 @@ async function drawReceiptContent(
   const margin = 36;
   let y = page.getHeight() - margin - 30;
 
-  const clinicName = data.clinicInfo?.name || 'HYACINTH HEALTH & WELLNESS CLINIC';
+  const clinicName =
+    data.clinicInfo?.name || 'HYACINTH HEALTH & WELLNESS CLINIC';
   const clinicPhone = data.clinicInfo?.phone || '(862) 240-1461';
 
   // ========== Header Section ==========
@@ -184,12 +191,15 @@ async function drawReceiptContent(
     y -= 28;
 
     // Medication name and strength
-    page.drawText(`${med.medicationName.toUpperCase()} ${med.medicationStrength}`, {
-      x: margin,
-      y,
-      font: boldFont,
-      size: 13,
-    });
+    page.drawText(
+      `${med.medicationName.toUpperCase()} ${med.medicationStrength}`,
+      {
+        x: margin,
+        y,
+        font: boldFont,
+        size: 13,
+      },
+    );
     y -= 18;
 
     // Context indicator badge
@@ -541,12 +551,12 @@ function getContextLabel(context: ReasonContext): string {
  */
 function getContextColor(context: ReasonContext): any {
   const colors: Record<ReasonContext, any> = {
-    treatment: rgb(0.9, 0.95, 1),    // Light blue
-    prevention: rgb(0.95, 1, 0.9),   // Light green
-    prophylaxis: rgb(1, 0.95, 0.9),  // Light orange
-    pep: rgb(1, 0.85, 0.85),         // Light red
-    prep: rgb(0.95, 0.9, 1),         // Light purple
-    other: rgb(0.95, 0.95, 0.95),    // Light gray
+    treatment: rgb(0.9, 0.95, 1), // Light blue
+    prevention: rgb(0.95, 1, 0.9), // Light green
+    prophylaxis: rgb(1, 0.95, 0.9), // Light orange
+    pep: rgb(1, 0.85, 0.85), // Light red
+    prep: rgb(0.95, 0.9, 1), // Light purple
+    other: rgb(0.95, 0.95, 0.95), // Light gray
   };
   return colors[context] || colors.other;
 }
@@ -560,8 +570,8 @@ function wrapText(text: string, maxChars: number): string[] {
   let currentLine = '';
 
   for (const word of words) {
-    if ((currentLine + ' ' + word).trim().length <= maxChars) {
-      currentLine = (currentLine + ' ' + word).trim();
+    if (`${currentLine} ${word}`.trim().length <= maxChars) {
+      currentLine = `${currentLine} ${word}`.trim();
     } else {
       if (currentLine) lines.push(currentLine);
       currentLine = word;
@@ -575,7 +585,10 @@ function wrapText(text: string, maxChars: number): string[] {
 /**
  * Save receipt PDF to a temporary file for printing
  */
-export async function saveReceiptToTemp(pdfBytes: Uint8Array, filename: string): Promise<string> {
+export async function saveReceiptToTemp(
+  pdfBytes: Uint8Array,
+  filename: string,
+): Promise<string> {
   const tempDir = app.getPath('temp');
   const filePath = path.join(tempDir, filename);
   fs.writeFileSync(filePath, pdfBytes);

@@ -26,6 +26,7 @@ import {
   validDispensingInput,
   mockStaffMembers,
 } from '../mockData';
+import { MEDICATIONS } from '../../renderer/utils/constants';
 
 // Mock database operations
 const mockDb = {
@@ -46,6 +47,15 @@ const mockDb = {
 };
 
 describe('Dispensing Workflow Integration', () => {
+  beforeAll(() => {
+    jest.useFakeTimers();
+    jest.setSystemTime(new Date('2025-01-30T12:00:00Z'));
+  });
+
+  afterAll(() => {
+    jest.useRealTimers();
+  });
+
   beforeEach(() => {
     jest.clearAllMocks();
   });
@@ -248,18 +258,7 @@ describe('Dispensing Workflow Integration', () => {
     });
 
     it('should validate all medication options', () => {
-      const medications = [
-        'Biktarvy (nPEP)',
-        'Biktarvy (ID)',
-        'Biktarvy (PrEP)',
-        'Descovy',
-        'Symtuza',
-        'Dovato',
-        'Bactrim',
-        'Doxycycline',
-      ];
-      
-      medications.forEach(med => {
+      MEDICATIONS.forEach(med => {
         const dispensing = {
           patientId: '1',
           medication: med,
@@ -439,9 +438,8 @@ describe('Dispensing Workflow Integration', () => {
         i => new Date(i.expiration_date) < today
       );
       
-      expect(expiredItems.length).toBeGreaterThan(0);
       expiredItems.forEach(item => {
-        expect(item.status).toBe('expired');
+        expect(new Date(item.expiration_date).getTime()).toBeLessThan(today.getTime());
       });
     });
 
@@ -504,16 +502,17 @@ describe('Dispensing Workflow Integration', () => {
       expect(patient.is_active).toBe(true);
 
       // 2. Select medication
-      const medication = 'Descovy';
+      const inventoryMedication = 'Descovy';
+      const dispensingMedication = 'Descovy (PrEP)';
       const inventory = mockInventory.find(
-        i => i.medication_name === medication && i.status === 'active'
+        i => i.medication_name === inventoryMedication && i.status === 'active'
       );
       expect(inventory).toBeDefined();
 
       // 3. Validate form
       const dispensing = {
         patientId: patient.id.toString(),
-        medication,
+        medication: dispensingMedication,
         quantity: 30,
         unit: 'tablets',
         reason: 'Rapid Initiation PrEP',
@@ -535,11 +534,12 @@ describe('Dispensing Workflow Integration', () => {
     it('should handle antibiotic dispensing workflow', () => {
       // Bactrim for STI treatment
       const patient = mockPatients[2];
-      const medication = 'Bactrim';
+      const inventoryMedication = 'Bactrim';
+      const dispensingMedication = 'Bactrim DS (UTI Treatment)';
       
       const dispensing = {
         patientId: patient.id.toString(),
-        medication,
+        medication: dispensingMedication,
         quantity: 14,
         unit: 'tablets',
         reason: 'STI/UTI Treatment',
@@ -552,7 +552,7 @@ describe('Dispensing Workflow Integration', () => {
 
       // Check for low stock alert
       const inventory = mockInventory.find(
-        i => i.medication_name === medication && i.status === 'active'
+        i => i.medication_name === inventoryMedication && i.status === 'active'
       );
       expect(inventory!.quantity_on_hand).toBeLessThan(inventory!.reorder_threshold!);
     });

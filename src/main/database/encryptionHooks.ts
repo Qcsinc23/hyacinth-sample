@@ -1,6 +1,6 @@
 /**
  * Database Encryption Hooks
- * 
+ *
  * Wraps database operations with automatic field-level encryption for sensitive data.
  * Ensures patient names, DOB, phone, etc. are encrypted at rest.
  */
@@ -23,7 +23,7 @@ import {
 export function wrapRun<T extends Record<string, unknown>>(
   stmt: Database.Statement,
   tableName: EncryptedTable,
-  data: T
+  data: T,
 ): Database.RunResult {
   const encrypted = encryptFields(data, tableName);
   return stmt.run(...Object.values(encrypted));
@@ -51,7 +51,7 @@ export function wrapAll<T extends Record<string, unknown>>(
   ...params: unknown[]
 ): T[] {
   const results = stmt.all(...params) as T[];
-  return results.map(row => decryptFields(row, tableName));
+  return results.map((row) => decryptFields(row, tableName));
 }
 
 // ============================================================================
@@ -61,14 +61,18 @@ export function wrapAll<T extends Record<string, unknown>>(
 /**
  * Encrypt patient data for database insertion/update
  */
-export function encryptPatientForDb<T extends Record<string, unknown>>(patient: T): T {
+export function encryptPatientForDb<T extends Record<string, unknown>>(
+  patient: T,
+): T {
   return encryptPatientData(patient);
 }
 
 /**
  * Decrypt patient data from database results
  */
-export function decryptPatientFromDb<T extends Record<string, unknown>>(patient: T | null): T | null {
+export function decryptPatientFromDb<T extends Record<string, unknown>>(
+  patient: T | null,
+): T | null {
   if (!patient) return null;
   return decryptPatientData(patient);
 }
@@ -76,8 +80,10 @@ export function decryptPatientFromDb<T extends Record<string, unknown>>(patient:
 /**
  * Decrypt multiple patient records from database results
  */
-export function decryptPatientsFromDb<T extends Record<string, unknown>>(patients: T[]): T[] {
-  return patients.map(p => decryptPatientData(p));
+export function decryptPatientsFromDb<T extends Record<string, unknown>>(
+  patients: T[],
+): T[] {
+  return patients.map((p) => decryptPatientData(p));
 }
 
 // ============================================================================
@@ -87,14 +93,18 @@ export function decryptPatientsFromDb<T extends Record<string, unknown>>(patient
 /**
  * Encrypt staff data for database insertion/update
  */
-export function encryptStaffForDb<T extends Record<string, unknown>>(staff: T): T {
+export function encryptStaffForDb<T extends Record<string, unknown>>(
+  staff: T,
+): T {
   return encryptStaffData(staff);
 }
 
 /**
  * Decrypt staff data from database results
  */
-export function decryptStaffFromDb<T extends Record<string, unknown>>(staff: T | null): T | null {
+export function decryptStaffFromDb<T extends Record<string, unknown>>(
+  staff: T | null,
+): T | null {
   if (!staff) return null;
   return decryptStaffData(staff);
 }
@@ -102,8 +112,10 @@ export function decryptStaffFromDb<T extends Record<string, unknown>>(staff: T |
 /**
  * Decrypt multiple staff records from database results
  */
-export function decryptStaffMembersFromDb<T extends Record<string, unknown>>(staff: T[]): T[] {
-  return staff.map(s => decryptStaffData(s));
+export function decryptStaffMembersFromDb<T extends Record<string, unknown>>(
+  staff: T[],
+): T[] {
+  return staff.map((s) => decryptStaffData(s));
 }
 
 // ============================================================================
@@ -114,7 +126,7 @@ export function decryptStaffMembersFromDb<T extends Record<string, unknown>>(sta
  * Create an INSERT statement for patients with automatic encryption
  */
 export function prepareEncryptedPatientInsert(
-  db: Database.Database
+  db: Database.Database,
 ): Database.Statement {
   return db.prepare(`
     INSERT INTO patients (
@@ -128,7 +140,7 @@ export function prepareEncryptedPatientInsert(
  * Create an UPDATE statement for patients with automatic encryption
  */
 export function prepareEncryptedPatientUpdate(
-  db: Database.Database
+  db: Database.Database,
 ): Database.Statement {
   return db.prepare(`
     UPDATE patients 
@@ -143,7 +155,7 @@ export function prepareEncryptedPatientUpdate(
  */
 export function preparePatientSelect(
   db: Database.Database,
-  whereClause: string = 'WHERE id = ?'
+  whereClause: string = 'WHERE id = ?',
 ): Database.Statement {
   return db.prepare(`SELECT * FROM patients ${whereClause}`);
 }
@@ -152,7 +164,7 @@ export function preparePatientSelect(
  * Create an INSERT statement for staff with automatic encryption
  */
 export function prepareEncryptedStaffInsert(
-  db: Database.Database
+  db: Database.Database,
 ): Database.Statement {
   return db.prepare(`
     INSERT INTO staff_members (
@@ -165,7 +177,7 @@ export function prepareEncryptedStaffInsert(
  * Create an UPDATE statement for staff with automatic encryption
  */
 export function prepareEncryptedStaffUpdate(
-  db: Database.Database
+  db: Database.Database,
 ): Database.Statement {
   return db.prepare(`
     UPDATE staff_members 
@@ -195,7 +207,7 @@ export interface PatientInput {
 export function insertPatientEncrypted(
   db: Database.Database,
   patient: PatientInput,
-  now: string
+  now: string,
 ): Record<string, unknown> {
   // Encrypt sensitive fields
   const encrypted = encryptPatientForDb({
@@ -219,9 +231,11 @@ export function insertPatientEncrypted(
   `);
 
   const result = stmt.run(encrypted);
-  
+
   // Fetch and decrypt the inserted record
-  const inserted = db.prepare('SELECT * FROM patients WHERE id = ?').get(result.lastInsertRowid) as Record<string, unknown> | null;
+  const inserted = db
+    .prepare('SELECT * FROM patients WHERE id = ?')
+    .get(result.lastInsertRowid) as Record<string, unknown> | null;
   return decryptPatientFromDb(inserted) || {};
 }
 
@@ -238,7 +252,7 @@ export interface StaffInput {
 export function insertStaffEncrypted(
   db: Database.Database,
   staff: StaffInput,
-  now: string
+  now: string,
 ): Record<string, unknown> {
   // Encrypt sensitive fields
   const encrypted = encryptStaffForDb({
@@ -257,9 +271,11 @@ export function insertStaffEncrypted(
   `);
 
   const result = stmt.run(encrypted);
-  
+
   // Fetch and decrypt the inserted record
-  const inserted = db.prepare('SELECT * FROM staff_members WHERE id = ?').get(result.lastInsertRowid) as Record<string, unknown> | null;
+  const inserted = db
+    .prepare('SELECT * FROM staff_members WHERE id = ?')
+    .get(result.lastInsertRowid) as Record<string, unknown> | null;
   return decryptStaffFromDb(inserted) || {};
 }
 
@@ -268,9 +284,11 @@ export function insertStaffEncrypted(
  */
 export function getPatientByIdDecrypted(
   db: Database.Database,
-  id: number
+  id: number,
 ): Record<string, unknown> | null {
-  const result = db.prepare('SELECT * FROM patients WHERE id = ?').get(id) as Record<string, unknown> | null;
+  const result = db
+    .prepare('SELECT * FROM patients WHERE id = ?')
+    .get(id) as Record<string, unknown> | null;
   return decryptPatientFromDb(result);
 }
 
@@ -279,9 +297,11 @@ export function getPatientByIdDecrypted(
  */
 export function getPatientByChartNumberDecrypted(
   db: Database.Database,
-  chartNumber: string
+  chartNumber: string,
 ): Record<string, unknown> | null {
-  const result = db.prepare('SELECT * FROM patients WHERE chart_number = ?').get(chartNumber) as Record<string, unknown> | null;
+  const result = db
+    .prepare('SELECT * FROM patients WHERE chart_number = ?')
+    .get(chartNumber) as Record<string, unknown> | null;
   return decryptPatientFromDb(result);
 }
 
@@ -290,9 +310,11 @@ export function getPatientByChartNumberDecrypted(
  */
 export function getStaffByIdDecrypted(
   db: Database.Database,
-  id: number
+  id: number,
 ): Record<string, unknown> | null {
-  const result = db.prepare('SELECT * FROM staff_members WHERE id = ?').get(id) as Record<string, unknown> | null;
+  const result = db
+    .prepare('SELECT * FROM staff_members WHERE id = ?')
+    .get(id) as Record<string, unknown> | null;
   return decryptStaffFromDb(result);
 }
 
@@ -300,13 +322,17 @@ export function getStaffByIdDecrypted(
  * Get all active patients with decryption
  */
 export function getActivePatientsDecrypted(
-  db: Database.Database
+  db: Database.Database,
 ): Record<string, unknown>[] {
-  const results = db.prepare(`
+  const results = db
+    .prepare(
+      `
     SELECT * FROM patients 
     WHERE is_active = 1 
     ORDER BY last_name, first_name
-  `).all() as Record<string, unknown>[];
+  `,
+    )
+    .all() as Record<string, unknown>[];
   return decryptPatientsFromDb(results);
 }
 
@@ -315,14 +341,14 @@ export function getActivePatientsDecrypted(
  */
 export function getAllStaffDecrypted(
   db: Database.Database,
-  onlyActive = true
+  onlyActive = true,
 ): Record<string, unknown>[] {
   let query = 'SELECT * FROM staff_members';
   if (onlyActive) {
     query += ' WHERE is_active = 1';
   }
   query += ' ORDER BY last_name, first_name';
-  
+
   const results = db.prepare(query).all() as Record<string, unknown>[];
   return decryptStaffMembersFromDb(results);
 }
@@ -332,33 +358,39 @@ export function getAllStaffDecrypted(
  */
 export function searchPatientsDecrypted(
   db: Database.Database,
-  searchPattern: string
+  searchPattern: string,
 ): Record<string, unknown>[] {
   // Note: Search is done on encrypted data, which means exact matches only
   // For proper search, we need to fetch all and filter in memory
-  const results = db.prepare(`
+  const results = db
+    .prepare(
+      `
     SELECT * FROM patients 
     WHERE is_active = 1
     ORDER BY last_name, first_name
-  `).all() as Record<string, unknown>[];
-  
+  `,
+    )
+    .all() as Record<string, unknown>[];
+
   const decrypted = decryptPatientsFromDb(results);
-  
+
   if (!searchPattern || searchPattern === '%') {
     return decrypted;
   }
-  
+
   const pattern = searchPattern.toLowerCase().replace(/%/g, '');
   return decrypted.filter((p: Record<string, unknown>) => {
     const firstName = String(p.first_name || '').toLowerCase();
     const lastName = String(p.last_name || '').toLowerCase();
     const chartNumber = String(p.chart_number || '').toLowerCase();
     const fullName = `${firstName} ${lastName}`;
-    
-    return firstName.includes(pattern) || 
-           lastName.includes(pattern) || 
-           chartNumber.includes(pattern) ||
-           fullName.includes(pattern);
+
+    return (
+      firstName.includes(pattern) ||
+      lastName.includes(pattern) ||
+      chartNumber.includes(pattern) ||
+      fullName.includes(pattern)
+    );
   });
 }
 
@@ -384,25 +416,29 @@ export interface PatientUpdateInput {
  */
 export function updatePatientEncrypted(
   db: Database.Database,
-  input: PatientUpdateInput
+  input: PatientUpdateInput,
 ): void {
   const { id } = input;
-  
+
   // Build dynamic update
   const updates: string[] = [];
   const params: Record<string, unknown> = { id };
-  
+
   if (input.chart_number !== undefined) {
     updates.push('chart_number = @chart_number');
     params.chart_number = input.chart_number;
   }
   if (input.first_name !== undefined) {
     updates.push('first_name = @first_name');
-    params.first_name = encryptPatientData({ first_name: input.first_name }).first_name;
+    params.first_name = encryptPatientData({
+      first_name: input.first_name,
+    }).first_name;
   }
   if (input.last_name !== undefined) {
     updates.push('last_name = @last_name');
-    params.last_name = encryptPatientData({ last_name: input.last_name }).last_name;
+    params.last_name = encryptPatientData({
+      last_name: input.last_name,
+    }).last_name;
   }
   if (input.dob !== undefined) {
     updates.push('dob = @dob');
@@ -410,34 +446,46 @@ export function updatePatientEncrypted(
   }
   if (input.phone !== undefined) {
     updates.push('phone = @phone');
-    params.phone = input.phone === null ? null : encryptPatientData({ phone: input.phone }).phone;
+    params.phone =
+      input.phone === null
+        ? null
+        : encryptPatientData({ phone: input.phone }).phone;
   }
   if (input.email !== undefined) {
     updates.push('email = @email');
-    params.email = input.email === null ? null : encryptPatientData({ email: input.email }).email;
+    params.email =
+      input.email === null
+        ? null
+        : encryptPatientData({ email: input.email }).email;
   }
   if (input.address !== undefined) {
     updates.push('address = @address');
-    params.address = input.address === null ? null : encryptPatientData({ address: input.address }).address;
+    params.address =
+      input.address === null
+        ? null
+        : encryptPatientData({ address: input.address }).address;
   }
   if (input.notes !== undefined) {
     updates.push('notes = @notes');
-    params.notes = input.notes === null ? null : encryptPatientData({ notes: input.notes }).notes;
+    params.notes =
+      input.notes === null
+        ? null
+        : encryptPatientData({ notes: input.notes }).notes;
   }
   if (input.is_active !== undefined) {
     updates.push('is_active = @is_active');
     params.is_active = input.is_active ? 1 : 0;
   }
-  
+
   if (updates.length === 0) return;
-  
+
   updates.push('updated_at = @updated_at');
   params.updated_at = new Date().toISOString();
-  
+
   const stmt = db.prepare(`
     UPDATE patients SET ${updates.join(', ')} WHERE id = @id
   `);
-  
+
   stmt.run(params);
 }
 
@@ -452,31 +500,35 @@ export interface StaffUpdateInput {
  */
 export function updateStaffEncrypted(
   db: Database.Database,
-  input: StaffUpdateInput
+  input: StaffUpdateInput,
 ): void {
   const { id } = input;
-  
+
   const updates: string[] = [];
   const params: Record<string, unknown> = { id };
-  
+
   if (input.first_name !== undefined) {
     updates.push('first_name = @first_name');
-    params.first_name = encryptStaffData({ first_name: input.first_name }).first_name;
+    params.first_name = encryptStaffData({
+      first_name: input.first_name,
+    }).first_name;
   }
   if (input.last_name !== undefined) {
     updates.push('last_name = @last_name');
-    params.last_name = encryptStaffData({ last_name: input.last_name }).last_name;
+    params.last_name = encryptStaffData({
+      last_name: input.last_name,
+    }).last_name;
   }
-  
+
   if (updates.length === 0) return;
-  
+
   updates.push('updated_at = @updated_at');
   params.updated_at = new Date().toISOString();
-  
+
   const stmt = db.prepare(`
     UPDATE staff_members SET ${updates.join(', ')} WHERE id = @id
   `);
-  
+
   stmt.run(params);
 }
 

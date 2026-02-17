@@ -1,6 +1,6 @@
 /**
  * Hyacinth Medication Dispensing System - Main Process
- * 
+ *
  * This module executes inside of electron's main process.
  * Handles database initialization, migrations, backup scheduling,
  * expiration scanning, and window management.
@@ -9,11 +9,6 @@
 import path from 'path';
 import fs from 'fs';
 import { app, BrowserWindow, shell, ipcMain, dialog } from 'electron';
-
-// Set app name before any getPath('userData') so the database and config live in a
-// stable directory (e.g. ~/Library/Application Support/Hyacinth) on every launch.
-// Without this, development runs can end up with different userData and a fresh DB each time.
-app.setName('Hyacinth');
 import { autoUpdater } from 'electron-updater';
 import log from 'electron-log';
 import MenuBuilder from './menu';
@@ -25,24 +20,36 @@ import { initializeDatabase, getDatabaseStatus } from './database';
 import { registerIpcHandlers } from './ipc-handlers';
 
 // Import authentication middleware
-import { 
-  createSession, 
-  clearSession, 
-  isAuthenticated, 
+import {
+  createSession,
+  clearSession,
+  isAuthenticated,
   getCurrentSession,
-  touchSession, 
-  setSessionTimeout 
+  touchSession,
+  setSessionTimeout,
 } from './middleware/authMiddleware';
 
 // Import services
 import { checkForExpiredItems } from './database/queries/alerts';
 import { startBackupScheduler, runManualBackup } from './backup/scheduler';
-import { initializeDefaultSettings, getSetting, setSetting } from './settings/settings';
+import {
+  initializeDefaultSettings,
+  getSetting,
+  setSetting,
+} from './settings/settings';
 import { setMainWindow as setPrintMainWindow } from './services/printService';
 
 // Import security utilities
 import { hashPin, verifyPin } from './security/pin';
-import { getStaffById, verifyPin as verifyStaffPinHash } from './database/queries/staff';
+import {
+  getStaffById,
+  verifyPin as verifyStaffPinHash,
+} from './database/queries/staff';
+
+// Set app name before any getPath('userData') so the database and config live in a
+// stable directory (e.g. ~/Library/Application Support/Hyacinth) on every launch.
+// Without this, development runs can end up with different userData and a fresh DB each time.
+app.setName('Hyacinth');
 
 class AppUpdater {
   constructor() {
@@ -72,7 +79,7 @@ const resetInactivityTimer = () => {
   if (inactivityTimer) {
     clearTimeout(inactivityTimer);
   }
-  
+
   if (!isLocked) {
     inactivityTimer = setTimeout(() => {
       if (mainWindow) {
@@ -104,7 +111,15 @@ const createWindow = async () => {
     ? preloadNextToMain
     : preloadDev;
   if (!fs.existsSync(preloadPath)) {
-    log.warn('[Main] Preload not found at', preloadPath, '(tried', preloadNextToMain, 'and', preloadDev, ')');
+    log.warn(
+      '[Main] Preload not found at',
+      preloadPath,
+      '(tried',
+      preloadNextToMain,
+      'and',
+      preloadDev,
+      ')',
+    );
   } else {
     log.info('[Main] Using preload:', preloadPath);
   }
@@ -160,7 +175,7 @@ const createWindow = async () => {
       touchSession();
     }
   });
-  
+
   mainWindow.on('focus', () => {
     resetInactivityTimer();
   });
@@ -183,7 +198,7 @@ const createWindow = async () => {
 ipcMain.handle('app:unlock', async (_event, pin?: string) => {
   try {
     const storedHash = getSetting('pinHash') as string | null;
-    
+
     if (!storedHash) {
       // No app PIN is configured, unlock immediately.
       isLocked = false;
@@ -209,7 +224,7 @@ ipcMain.handle('app:unlock', async (_event, pin?: string) => {
       resetInactivityTimer();
       return { success: true };
     }
-    
+
     return { success: false, error: 'Invalid PIN' };
   } catch (error) {
     log.error('Failed to verify PIN:', error);
@@ -222,45 +237,50 @@ ipcMain.handle('app:isLocked', () => {
 });
 
 // Staff login with PIN - creates authenticated session
-ipcMain.handle('auth:login', async (_event, { staffId, pin }: { staffId: number; pin: string }) => {
-  try {
-    // Verify the staff member exists and is active
-    const staff = getStaffById(staffId);
-    if (!staff) {
-      return { success: false, error: 'Staff member not found' };
+ipcMain.handle(
+  'auth:login',
+  async (_event, { staffId, pin }: { staffId: number; pin: string }) => {
+    try {
+      // Verify the staff member exists and is active
+      const staff = getStaffById(staffId);
+      if (!staff) {
+        return { success: false, error: 'Staff member not found' };
+      }
+
+      if (!staff.is_active) {
+        return { success: false, error: 'Staff account is inactive' };
+      }
+
+      // Verify the PIN
+      const isValidPin = verifyStaffPinHash(pin, staff.pin_hash);
+      if (!isValidPin) {
+        return { success: false, error: 'Invalid PIN' };
+      }
+
+      // Create authenticated session
+      createSession(staffId, staff.role);
+      isLocked = false;
+      resetInactivityTimer();
+
+      log.info(
+        `[Auth] Staff ${staffId} (${staff.role}) logged in successfully`,
+      );
+
+      return {
+        success: true,
+        data: {
+          staffId: staff.id,
+          role: staff.role,
+          firstName: staff.first_name,
+          lastName: staff.last_name,
+        },
+      };
+    } catch (error) {
+      log.error('[Auth] Login failed:', error);
+      return { success: false, error: 'Login failed' };
     }
-    
-    if (!staff.is_active) {
-      return { success: false, error: 'Staff account is inactive' };
-    }
-    
-    // Verify the PIN
-    const isValidPin = verifyStaffPinHash(pin, staff.pin_hash);
-    if (!isValidPin) {
-      return { success: false, error: 'Invalid PIN' };
-    }
-    
-    // Create authenticated session
-    createSession(staffId, staff.role);
-    isLocked = false;
-    resetInactivityTimer();
-    
-    log.info(`[Auth] Staff ${staffId} (${staff.role}) logged in successfully`);
-    
-    return { 
-      success: true, 
-      data: { 
-        staffId: staff.id, 
-        role: staff.role,
-        firstName: staff.first_name,
-        lastName: staff.last_name,
-      } 
-    };
-  } catch (error) {
-    log.error('[Auth] Login failed:', error);
-    return { success: false, error: 'Login failed' };
-  }
-});
+  },
+);
 
 // Logout handler - clears session
 ipcMain.handle('auth:logout', async () => {
@@ -283,14 +303,14 @@ ipcMain.handle('auth:check', async () => {
   try {
     const authenticated = isAuthenticated();
     const session = getCurrentSession();
-    
-    return { 
-      success: true, 
-      data: { 
+
+    return {
+      success: true,
+      data: {
         authenticated,
         staffId: session?.staffId || null,
         role: session?.role || null,
-      } 
+      },
     };
   } catch (error) {
     log.error('[Auth] Check failed:', error);
@@ -341,11 +361,11 @@ ipcMain.handle('security:setPin', async (_event, pin: string) => {
 ipcMain.handle('security:verifyPin', async (_event, pin: string) => {
   try {
     const storedHash = getSetting('pinHash') as string | null;
-    
+
     if (!storedHash) {
       return { success: false, error: 'No PIN set' };
     }
-    
+
     const isValid = await verifyPin(pin, storedHash);
     return { success: isValid };
   } catch (error) {
@@ -354,25 +374,28 @@ ipcMain.handle('security:verifyPin', async (_event, pin: string) => {
   }
 });
 
-ipcMain.handle('security:changePin', async (_event, oldPin: string, newPin: string) => {
-  try {
-    const storedHash = getSetting('pinHash') as string | null;
-    
-    if (storedHash) {
-      const isValid = await verifyPin(oldPin, storedHash);
-      if (!isValid) {
-        return { success: false, error: 'Current PIN is incorrect' };
+ipcMain.handle(
+  'security:changePin',
+  async (_event, oldPin: string, newPin: string) => {
+    try {
+      const storedHash = getSetting('pinHash') as string | null;
+
+      if (storedHash) {
+        const isValid = await verifyPin(oldPin, storedHash);
+        if (!isValid) {
+          return { success: false, error: 'Current PIN is incorrect' };
+        }
       }
+
+      const newHash = await hashPin(newPin);
+      setSetting('pinHash', newHash);
+      return { success: true };
+    } catch (error) {
+      log.error('Failed to change PIN:', error);
+      return { success: false, error: 'Failed to change PIN' };
     }
-    
-    const newHash = await hashPin(newPin);
-    setSetting('pinHash', newHash);
-    return { success: true };
-  } catch (error) {
-    log.error('Failed to change PIN:', error);
-    return { success: false, error: 'Failed to change PIN' };
-  }
-});
+  },
+);
 
 // ============================================================================
 // Backup IPC handlers
@@ -427,7 +450,8 @@ app.on('window-all-closed', () => {
   }
 });
 
-app.whenReady()
+app
+  .whenReady()
   .then(() => {
     // Initialize database (includes schema, migrations, and seed data)
     initDatabase();
@@ -440,16 +464,16 @@ app.whenReady()
 
     // Initialize default settings
     initializeDefaultSettings();
-    
+
     // Register all IPC handlers
     registerIpcHandlers();
-    
+
     // Start backup scheduler
     startBackupScheduler();
-    
+
     // Create main window
     createWindow();
-    
+
     app.on('activate', () => {
       if (mainWindow === null) createWindow();
     });
@@ -458,7 +482,7 @@ app.whenReady()
     console.error('Failed to initialize app:', error);
     dialog.showErrorBox(
       'Initialization Error',
-      'Failed to start Hyacinth. Please check the logs.'
+      'Failed to start Hyacinth. Please check the logs.',
     );
   });
 

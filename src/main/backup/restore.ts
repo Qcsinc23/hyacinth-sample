@@ -1,6 +1,6 @@
 /**
  * Restore from Backup
- * 
+ *
  * Handles restoring the database from a backup file.
  */
 
@@ -34,13 +34,13 @@ export const restoreFromBackup = async (
   options?: {
     verifyChecksum?: boolean;
     currentDbPath?: string;
-  }
+  },
 ): Promise<RestoreResult> => {
   const verifyChecksum = options?.verifyChecksum ?? true;
   const currentDbPath = options?.currentDbPath || getDefaultDbPath();
-  
+
   log.info(`Starting restore from: ${backupPath}`);
-  
+
   try {
     // Verify backup file exists
     if (!fs.existsSync(backupPath)) {
@@ -49,28 +49,28 @@ export const restoreFromBackup = async (
         message: 'Backup file not found',
       };
     }
-    
+
     // Verify checksum if requested
     if (verifyChecksum) {
       const checksumPath = `${backupPath}.sha256`;
-      
+
       if (fs.existsSync(checksumPath)) {
         const expectedChecksum = fs.readFileSync(checksumPath, 'utf-8').trim();
         const actualChecksum = await generateFileChecksum(backupPath);
-        
+
         if (actualChecksum !== expectedChecksum) {
           return {
             success: false,
             message: 'Backup file checksum mismatch. File may be corrupted.',
           };
         }
-        
+
         log.info('Backup checksum verified');
       } else {
         log.warn('No checksum file found for backup');
       }
     }
-    
+
     // Get backup info before restore
     const stats = fs.statSync(backupPath);
     const backupInfo = {
@@ -78,81 +78,82 @@ export const restoreFromBackup = async (
       size: stats.size,
       createdAt: stats.mtime.toISOString(),
     };
-    
+
     // Create timestamped backup of current database before restore
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
     const currentBackupPath = `${currentDbPath}.pre-restore-${timestamp}`;
-    
+
     if (fs.existsSync(currentDbPath)) {
       fs.copyFileSync(currentDbPath, currentBackupPath);
       log.info(`Current database backed up to: ${currentBackupPath}`);
     }
-    
+
     // Handle compressed backups
     let sourcePath = backupPath;
     let needsCleanup = false;
-    
+
     if (backupPath.endsWith('.gz')) {
       const tempPath = path.join(
         path.dirname(currentDbPath),
-        `temp_restore_${Date.now()}.db`
+        `temp_restore_${Date.now()}.db`,
       );
-      
+
       await decompressFile(backupPath, tempPath);
       sourcePath = tempPath;
       needsCleanup = true;
-      
+
       log.info('Backup decompressed');
     }
-    
+
     // Verify the decompressed file is a valid SQLite database
     try {
       const testDb = require('better-sqlite3')(sourcePath, { readonly: true });
-      
+
       // Test query
       testDb.prepare('SELECT 1').get();
-      
+
       // Verify tables
-      const tables = testDb.prepare(
-        "SELECT name FROM sqlite_master WHERE type='table'"
-      ).all() as Array<{ name: string }>;
-      
+      const tables = testDb
+        .prepare("SELECT name FROM sqlite_master WHERE type='table'")
+        .all() as Array<{ name: string }>;
+
       const tableNames = tables.map((t) => t.name);
       log.info(`Backup contains tables: ${tableNames.join(', ')}`);
-      
+
       testDb.close();
     } catch (error) {
       if (needsCleanup && fs.existsSync(sourcePath)) {
         fs.unlinkSync(sourcePath);
       }
-      
+
       return {
         success: false,
-        message: 'Backup file is not a valid database: ' + (error as Error).message,
+        message: `Backup file is not a valid database: ${(error as Error).message}`,
       };
     }
-    
+
     // Copy backup to current database location
     fs.copyFileSync(sourcePath, currentDbPath);
-    
+
     // Clean up temporary files
     if (needsCleanup && fs.existsSync(sourcePath)) {
       fs.unlinkSync(sourcePath);
     }
-    
+
     log.info('Database restored successfully');
-    
+
     return {
       success: true,
-      message: 'Database restored successfully. Please restart the application.',
+      message:
+        'Database restored successfully. Please restart the application.',
       backupInfo,
     };
   } catch (error) {
     log.error('Restore failed:', error);
-    
+
     return {
       success: false,
-      message: 'Restore failed: ' + (error as Error).message,
+      message: `Restore failed: ${(error as Error).message}`,
     };
   }
 };
@@ -162,12 +163,12 @@ export const restoreFromBackup = async (
  */
 const decompressFile = async (
   sourcePath: string,
-  destPath: string
+  destPath: string,
 ): Promise<void> => {
   const source = fs.createReadStream(sourcePath);
   const destination = fs.createWriteStream(destPath);
   const gunzip = createGunzip();
-  
+
   await pipeline(source, gunzip, destination);
 };
 
@@ -191,16 +192,16 @@ export const showRestoreDialog = async (): Promise<RestoreResult> => {
     ],
     properties: ['openFile'],
   });
-  
+
   if (result.canceled || result.filePaths.length === 0) {
     return {
       success: false,
       message: 'Restore cancelled',
     };
   }
-  
+
   const backupPath = result.filePaths[0];
-  
+
   // Confirm restore
   const confirmResult = await dialog.showMessageBox({
     type: 'warning',
@@ -209,19 +210,19 @@ export const showRestoreDialog = async (): Promise<RestoreResult> => {
     cancelId: 0,
     title: 'Confirm Restore',
     message: 'Are you sure you want to restore from backup?',
-    detail: 
+    detail:
       'This will replace your current database with the backup. ' +
       'A backup of your current database will be created first. ' +
       'The application will need to restart after restore.',
   });
-  
+
   if (confirmResult.response === 0) {
     return {
       success: false,
       message: 'Restore cancelled',
     };
   }
-  
+
   return restoreFromBackup(backupPath);
 };
 
@@ -229,7 +230,7 @@ export const showRestoreDialog = async (): Promise<RestoreResult> => {
  * Validate a backup file without restoring
  */
 export const validateBackup = async (
-  backupPath: string
+  backupPath: string,
 ): Promise<{
   valid: boolean;
   message: string;
@@ -246,54 +247,58 @@ export const validateBackup = async (
         message: 'Backup file not found',
       };
     }
-    
+
     const stats = fs.statSync(backupPath);
-    
+
     if (stats.size === 0) {
       return {
         valid: false,
         message: 'Backup file is empty',
       };
     }
-    
+
     // Handle compressed backups
     let sourcePath = backupPath;
     let needsCleanup = false;
-    
+
     if (backupPath.endsWith('.gz')) {
       const tempPath = path.join(
         app.getPath('temp'),
-        `validate_${Date.now()}.db`
+        `validate_${Date.now()}.db`,
       );
-      
+
       await decompressFile(backupPath, tempPath);
       sourcePath = tempPath;
       needsCleanup = true;
     }
-    
+
     try {
       const testDb = require('better-sqlite3')(sourcePath, { readonly: true });
-      
+
       // Get tables
-      const tables = testDb.prepare(
-        "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"
-      ).all() as Array<{ name: string }>;
-      
+      const tables = testDb
+        .prepare(
+          "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'",
+        )
+        .all() as Array<{ name: string }>;
+
       const tableNames = tables.map((t) => t.name);
-      
+
       // Get record counts
       const recordCounts: Record<string, number> = {};
       for (const table of tableNames) {
         try {
-          const count = testDb.prepare(`SELECT COUNT(*) as count FROM "${table}"`).get() as { count: number };
+          const count = testDb
+            .prepare(`SELECT COUNT(*) as count FROM "${table}"`)
+            .get() as { count: number };
           recordCounts[table] = count.count;
         } catch {
           recordCounts[table] = -1;
         }
       }
-      
+
       testDb.close();
-      
+
       const requiredTables = [
         'patients',
         'staff_members',
@@ -306,8 +311,10 @@ export const validateBackup = async (
         'audit_log',
         'app_settings',
       ];
-      const missingTables = requiredTables.filter((t) => !tableNames.includes(t));
-      
+      const missingTables = requiredTables.filter(
+        (t) => !tableNames.includes(t),
+      );
+
       if (missingTables.length > 0) {
         return {
           valid: false,
@@ -319,7 +326,7 @@ export const validateBackup = async (
           },
         };
       }
-      
+
       return {
         valid: true,
         message: 'Backup is valid',
@@ -337,7 +344,7 @@ export const validateBackup = async (
   } catch (error) {
     return {
       valid: false,
-      message: 'Backup validation failed: ' + (error as Error).message,
+      message: `Backup validation failed: ${(error as Error).message}`,
     };
   }
 };

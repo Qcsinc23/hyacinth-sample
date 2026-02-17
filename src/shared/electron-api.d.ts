@@ -14,8 +14,6 @@ import type {
   InventoryAlert,
   AuditLog,
   Draft,
-  CustomMedication,
-  CustomReason,
   SearchResult,
   CreatePatientInput,
   UpdatePatientInput,
@@ -37,8 +35,16 @@ export interface ElectronAPI {
     runSeed: () => Promise<{ seeded: boolean }>;
     seed: () => Promise<boolean>;
     healthCheck: () => Promise<{ healthy: boolean; issues: string[] }>;
-    getVersion: () => Promise<{ currentVersion: number; latestVersion: number; pendingCount: number }>;
-    runMigrations: () => Promise<{ currentVersion: number; latestVersion: number; pendingCount: number }>;
+    getVersion: () => Promise<{
+      currentVersion: number;
+      latestVersion: number;
+      pendingCount: number;
+    }>;
+    runMigrations: () => Promise<{
+      currentVersion: number;
+      latestVersion: number;
+      pendingCount: number;
+    }>;
   };
 
   // Patients
@@ -58,7 +64,10 @@ export interface ElectronAPI {
       sortOrder?: 'asc' | 'desc';
     }) => Promise<SearchResult<Patient>>;
     getActive: () => Promise<Patient[]>;
-    checkChartNumber: (chartNumber: string, excludeId?: number) => Promise<boolean>;
+    checkChartNumber: (
+      chartNumber: string,
+      excludeId?: number,
+    ) => Promise<boolean>;
   };
 
   // Staff
@@ -67,7 +76,9 @@ export interface ElectronAPI {
     get: (id: number) => Promise<StaffMember | null>;
     getAll: (onlyActive?: boolean) => Promise<StaffMember[]>;
     update: (id: number, input: UpdateStaffInput) => Promise<StaffMember>;
-    verifyPin: (pin: string) => Promise<{ success: boolean; staff?: StaffMember }>;
+    verifyPin: (
+      pin: string,
+    ) => Promise<{ success: boolean; staff?: StaffMember }>;
     deactivate: (id: number) => Promise<void>;
     reactivate: (id: number) => Promise<void>;
     isAdmin: (staffId: number) => Promise<boolean>;
@@ -78,7 +89,10 @@ export interface ElectronAPI {
   dispensing: {
     create: (input: CreateDispenseInput) => Promise<DispensingRecord>;
     get: (id: number) => Promise<DispenseWithDetails | null>;
-    getByPatient: (patientId: number, limit?: number) => Promise<DispenseWithDetails[]>;
+    getByPatient: (
+      patientId: number,
+      limit?: number,
+    ) => Promise<DispenseWithDetails[]>;
     search: (options?: {
       page?: number;
       pageSize?: number;
@@ -97,7 +111,9 @@ export interface ElectronAPI {
   inventory: {
     receive: (input: ReceiveInventoryInput) => Promise<Inventory>;
     get: (id: number) => Promise<Inventory | null>;
-    getWithTransactions: (id: number) => Promise<InventoryWithTransactions | null>;
+    getWithTransactions: (
+      id: number,
+    ) => Promise<InventoryWithTransactions | null>;
     search: (options?: {
       page?: number;
       pageSize?: number;
@@ -110,12 +126,22 @@ export interface ElectronAPI {
       pageSize?: number;
       search?: string;
     }) => Promise<SearchResult<Inventory>>;
-    getByMedication: (medicationName: string, onlyActive?: boolean) => Promise<Inventory[]>;
+    getByMedication: (
+      medicationName: string,
+      onlyActive?: boolean,
+    ) => Promise<Inventory[]>;
     getLowStock: () => Promise<Inventory[]>;
     getExpiring: (days: number) => Promise<Inventory[]>;
     adjust: (input: AdjustInventoryInput) => Promise<Inventory>;
-    getTransactions: (inventoryId?: number, limit?: number) => Promise<InventoryTransaction[]>;
-    quarantine: (inventoryId: number, reason: string, staffId: number) => Promise<Inventory>;
+    getTransactions: (
+      inventoryId?: number,
+      limit?: number,
+    ) => Promise<InventoryTransaction[]>;
+    quarantine: (
+      inventoryId: number,
+      reason: string,
+      staffId: number,
+    ) => Promise<Inventory>;
   };
 
   // Alerts
@@ -133,7 +159,10 @@ export interface ElectronAPI {
       pageSize?: number;
     }) => Promise<{ data: InventoryAlert[]; total: number }>;
     acknowledge: (alertId: number, staffId: number) => Promise<InventoryAlert>;
-    acknowledgeForInventory: (inventoryId: number, staffId: number) => Promise<number>;
+    acknowledgeForInventory: (
+      inventoryId: number,
+      staffId: number,
+    ) => Promise<number>;
     getCounts: () => Promise<{
       total: number;
       critical: number;
@@ -141,7 +170,12 @@ export interface ElectronAPI {
       info: number;
       unacknowledged: number;
     }>;
-    create: (inventoryId: number, alertType: string, severity: string, message: string) => Promise<InventoryAlert>;
+    create: (
+      inventoryId: number,
+      alertType: string,
+      severity: string,
+      message: string,
+    ) => Promise<InventoryAlert>;
   };
 
   // Audit
@@ -181,7 +215,10 @@ export interface ElectronAPI {
   // Settings
   settings: {
     get: (key: string) => Promise<string | null>;
-    set: (params: { key: string; value: string }) => Promise<{ success: boolean }>;
+    set: (params: {
+      key: string;
+      value: string;
+    }) => Promise<{ success: boolean }>;
     getAll: () => Promise<Record<string, string>>;
   };
 }

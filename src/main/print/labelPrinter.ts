@@ -12,7 +12,13 @@ import { app } from 'electron';
 import log from 'electron-log';
 
 // Reason context type
-export type ReasonContext = 'treatment' | 'prevention' | 'prophylaxis' | 'pep' | 'prep' | 'other';
+export type ReasonContext =
+  | 'treatment'
+  | 'prevention'
+  | 'prophylaxis'
+  | 'pep'
+  | 'prep'
+  | 'other';
 
 // Avery 5160 Label Specifications (in points, 72 points = 1 inch)
 const AVERY_5160 = {
@@ -66,7 +72,7 @@ export interface LabelPrintOptions {
  */
 export async function generateSingleLabel(
   labelData: LabelData,
-  _options: LabelPrintOptions = {}
+  _options: LabelPrintOptions = {},
 ): Promise<Uint8Array> {
   try {
     const pdfDoc = await PDFDocument.create();
@@ -87,13 +93,9 @@ export async function generateSingleLabel(
  */
 export async function generateLabelSheet(
   labels: LabelData[],
-  options: LabelPrintOptions = {}
+  options: LabelPrintOptions = {},
 ): Promise<Uint8Array> {
-  const {
-    startPosition = 1,
-    skipPositions = [],
-    copies = 1,
-  } = options;
+  const { startPosition = 1, skipPositions = [], copies = 1 } = options;
 
   try {
     const pdfDoc = await PDFDocument.create();
@@ -119,7 +121,10 @@ export async function generateLabelSheet(
 
       // Create new page if needed
       if (!currentPage || currentPosition === 1) {
-        currentPage = pdfDoc.addPage([AVERY_5160.pageWidth, AVERY_5160.pageHeight]);
+        currentPage = pdfDoc.addPage([
+          AVERY_5160.pageWidth,
+          AVERY_5160.pageHeight,
+        ]);
       }
 
       // Calculate position
@@ -150,8 +155,13 @@ function calculateLabelPosition(position: number): { x: number; y: number } {
   const col = pos % AVERY_5160.columns;
   const row = Math.floor(pos / AVERY_5160.columns);
 
-  const x = AVERY_5160.marginLeft + col * (AVERY_5160.labelWidth + AVERY_5160.columnGap);
-  const y = AVERY_5160.pageHeight - AVERY_5160.marginTop - (row + 1) * AVERY_5160.labelHeight;
+  const x =
+    AVERY_5160.marginLeft +
+    col * (AVERY_5160.labelWidth + AVERY_5160.columnGap);
+  const y =
+    AVERY_5160.pageHeight -
+    AVERY_5160.marginTop -
+    (row + 1) * AVERY_5160.labelHeight;
 
   return { x, y };
 }
@@ -165,9 +175,12 @@ async function drawAveryLabel(
   data: LabelData,
   x: number,
   y: number,
-  pdfDoc: PDFDocument
+  pdfDoc: PDFDocument,
 ): Promise<void> {
-  const { width, height } = { width: AVERY_5160.labelWidth, height: AVERY_5160.labelHeight };
+  const { width, height } = {
+    width: AVERY_5160.labelWidth,
+    height: AVERY_5160.labelHeight,
+  };
 
   // Draw border (for cutting guide - very light)
   page.drawRectangle({
@@ -195,12 +208,15 @@ async function drawAveryLabel(
   currentY -= 11;
 
   // Medication name and strength
-  page.drawText(`${data.medicationName} ${data.medicationStrength}`.toUpperCase(), {
-    x: x + margin,
-    y: currentY,
-    font: boldFont,
-    size: 8,
-  });
+  page.drawText(
+    `${data.medicationName} ${data.medicationStrength}`.toUpperCase(),
+    {
+      x: x + margin,
+      y: currentY,
+      font: boldFont,
+      size: 8,
+    },
+  );
   currentY -= 10;
 
   // Context indicator badge
@@ -263,7 +279,8 @@ async function drawAveryLabel(
   }
 
   // Warnings indicator with icon (if any)
-  const allWarnings = data.fullWarnings.length > 0 ? data.fullWarnings : data.warnings;
+  const allWarnings =
+    data.fullWarnings.length > 0 ? data.fullWarnings : data.warnings;
   if (allWarnings.length > 0) {
     // Draw warning icon in top right
     page.drawText('⚠', {
@@ -292,7 +309,7 @@ async function drawAveryLabel(
 async function drawLabelContent(
   page: PDFPage,
   data: LabelData,
-  pdfDoc: PDFDocument
+  pdfDoc: PDFDocument,
 ): Promise<void> {
   const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
   const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
@@ -377,12 +394,15 @@ async function drawLabelContent(
     size: 10,
   });
   y -= 15;
-  page.drawText(`${data.quantity} ${data.unit} (${data.daySupply}-day supply)`, {
-    x: margin,
-    y,
-    font: boldFont,
-    size: 11,
-  });
+  page.drawText(
+    `${data.quantity} ${data.unit} (${data.daySupply}-day supply)`,
+    {
+      x: margin,
+      y,
+      font: boldFont,
+      size: 11,
+    },
+  );
   y -= 14;
 
   // Rx number
@@ -504,7 +524,8 @@ async function drawLabelContent(
   y -= 20;
 
   // Warnings section - show ALL warnings
-  const allWarnings = data.fullWarnings.length > 0 ? data.fullWarnings : data.warnings;
+  const allWarnings =
+    data.fullWarnings.length > 0 ? data.fullWarnings : data.warnings;
   if (allWarnings.length > 0) {
     y -= 10;
 
@@ -596,12 +617,12 @@ function getContextLabel(context: ReasonContext): string {
  */
 function getContextColor(context: ReasonContext): any {
   const colors: Record<ReasonContext, any> = {
-    treatment: rgb(0.9, 0.95, 1),    // Light blue
-    prevention: rgb(0.95, 1, 0.9),   // Light green
-    prophylaxis: rgb(1, 0.95, 0.9),  // Light orange
-    pep: rgb(1, 0.85, 0.85),         // Light red
-    prep: rgb(0.95, 0.9, 1),         // Light purple
-    other: rgb(0.95, 0.95, 0.95),    // Light gray
+    treatment: rgb(0.9, 0.95, 1), // Light blue
+    prevention: rgb(0.95, 1, 0.9), // Light green
+    prophylaxis: rgb(1, 0.95, 0.9), // Light orange
+    pep: rgb(1, 0.85, 0.85), // Light red
+    prep: rgb(0.95, 0.9, 1), // Light purple
+    other: rgb(0.95, 0.95, 0.95), // Light gray
   };
   return colors[context] || colors.other;
 }
@@ -609,7 +630,10 @@ function getContextColor(context: ReasonContext): any {
 /**
  * Save PDF to a temporary file for printing
  */
-export async function savePdfToTemp(pdfBytes: Uint8Array, filename: string): Promise<string> {
+export async function savePdfToTemp(
+  pdfBytes: Uint8Array,
+  filename: string,
+): Promise<string> {
   const tempDir = app.getPath('temp');
   const filePath = path.join(tempDir, filename);
   fs.writeFileSync(filePath, pdfBytes);
@@ -621,7 +645,7 @@ export async function savePdfToTemp(pdfBytes: Uint8Array, filename: string): Pro
  */
 function truncateText(text: string, maxLength: number): string {
   if (text.length <= maxLength) return text;
-  return text.substring(0, maxLength - 3) + '...';
+  return `${text.substring(0, maxLength - 3)}...`;
 }
 
 /**
@@ -633,8 +657,8 @@ function wrapText(text: string, maxChars: number): string[] {
   let currentLine = '';
 
   for (const word of words) {
-    if ((currentLine + ' ' + word).trim().length <= maxChars) {
-      currentLine = (currentLine + ' ' + word).trim();
+    if (`${currentLine} ${word}`.trim().length <= maxChars) {
+      currentLine = `${currentLine} ${word}`.trim();
     } else {
       if (currentLine) lines.push(currentLine);
       currentLine = word;

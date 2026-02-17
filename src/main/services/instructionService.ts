@@ -8,10 +8,18 @@
  * - Context-specific warnings and dosing information
  */
 
-import { validateLotForDispensing as validateInventoryLot, getLotByNumber, type LotValidationResult } from '../database/queries/inventory';
+import {
+  validateLotForDispensing as validateInventoryLot,
+  getLotByNumber,
+  type LotValidationResult,
+} from '../database/queries/inventory';
 import { REASON_INSTRUCTION_MAP } from '../../renderer/data/reasonInstructionMapping';
 import type { ReasonContext } from '../../renderer/types';
-import { getInstructionTemplateForMedication, getTemplatesForMedication, getContextsForMedication } from '../database/queries/medicationCatalog';
+import {
+  getInstructionTemplateForMedication,
+  getTemplatesForMedication,
+  getContextsForMedication,
+} from '../database/queries/medicationCatalog';
 import type { InstructionTemplate } from '../database/queries/medicationCatalog';
 
 // ============================================================================
@@ -49,7 +57,12 @@ export interface DispensingLineItemData {
 }
 
 export interface InstructionServiceError extends Error {
-  code: 'MEDICATION_NOT_FOUND' | 'CONFLICTING_CONTEXTS' | 'INSUFFICIENT_DATA' | 'LOT_NOT_FOUND' | 'LOT_EXPIRED';
+  code:
+    | 'MEDICATION_NOT_FOUND'
+    | 'CONFLICTING_CONTEXTS'
+    | 'INSUFFICIENT_DATA'
+    | 'LOT_NOT_FOUND'
+    | 'LOT_EXPIRED';
   details?: unknown;
 }
 
@@ -61,7 +74,9 @@ export interface InstructionServiceError extends Error {
  * Get instruction context from dispense reasons
  * Analyzes the selected reasons to determine the most appropriate context
  */
-export function getContextFromReasons(reasons: DispenseReason[]): ReasonContextResult {
+export function getContextFromReasons(
+  reasons: DispenseReason[],
+): ReasonContextResult {
   if (reasons.length === 0) {
     return {
       context: 'other',
@@ -79,7 +94,10 @@ export function getContextFromReasons(reasons: DispenseReason[]): ReasonContextR
 
   // Count occurrences of each context
   for (const reason of reasons) {
-    const config = REASON_INSTRUCTION_MAP[reason.reasonName as keyof typeof REASON_INSTRUCTION_MAP];
+    const config =
+      REASON_INSTRUCTION_MAP[
+        reason.reasonName as keyof typeof REASON_INSTRUCTION_MAP
+      ];
 
     if (config) {
       const count = contexts.get(config.context) || 0;
@@ -92,7 +110,9 @@ export function getContextFromReasons(reasons: DispenseReason[]): ReasonContextR
       // Custom reasons default to 'other' context
       const count = contexts.get('other') || 0;
       contexts.set('other', count + 1);
-      warnings.push(`Custom reason "${reason.reasonName}" - context assumed as 'other'`);
+      warnings.push(
+        `Custom reason "${reason.reasonName}" - context assumed as 'other'`,
+      );
     }
   }
 
@@ -110,21 +130,34 @@ export function getContextFromReasons(reasons: DispenseReason[]): ReasonContextR
   // Check for conflicting contexts (e.g., treatment + prevention)
   if (contexts.size > 1) {
     const treatmentCount = contexts.get('treatment') || 0;
-    const preventionCount = (contexts.get('prevention') || 0) + (contexts.get('prep') || 0) + (contexts.get('pep') || 0) + (contexts.get('prophylaxis') || 0);
+    const preventionCount =
+      (contexts.get('prevention') || 0) +
+      (contexts.get('prep') || 0) +
+      (contexts.get('pep') || 0) +
+      (contexts.get('prophylaxis') || 0);
 
     if (treatmentCount > 0 && preventionCount > 0) {
       conflictingReasons.push(
         ...reasons
-          .filter(r => {
-            const config = REASON_INSTRUCTION_MAP[r.reasonName as keyof typeof REASON_INSTRUCTION_MAP];
-            return config && (
-              (config.context === 'treatment' && preventionCount > 0) ||
-              (['prevention', 'prep', 'pep', 'prophylaxis'].includes(config.context) && treatmentCount > 0)
+          .filter((r) => {
+            const config =
+              REASON_INSTRUCTION_MAP[
+                r.reasonName as keyof typeof REASON_INSTRUCTION_MAP
+              ];
+            return (
+              config &&
+              ((config.context === 'treatment' && preventionCount > 0) ||
+                (['prevention', 'prep', 'pep', 'prophylaxis'].includes(
+                  config.context,
+                ) &&
+                  treatmentCount > 0))
             );
           })
-          .map(r => r.reasonName)
+          .map((r) => r.reasonName),
       );
-      warnings.push('Conflicting reasons detected: Both treatment and prevention contexts present');
+      warnings.push(
+        'Conflicting reasons detected: Both treatment and prevention contexts present',
+      );
     }
   }
 
@@ -139,7 +172,9 @@ export function getContextFromReasons(reasons: DispenseReason[]): ReasonContextR
     confidence = 'medium';
   } else {
     confidence = 'low';
-    warnings.push('Low confidence in context detection - multiple or conflicting reasons present');
+    warnings.push(
+      'Low confidence in context detection - multiple or conflicting reasons present',
+    );
   }
 
   return {
@@ -162,11 +197,11 @@ export function getContextFromReasons(reasons: DispenseReason[]): ReasonContextR
  */
 export function getInstructionTemplate(
   medicationName: string,
-  context: ReasonContext
+  context: ReasonContext,
 ): InstructionTemplate | null {
   // Query database for instruction template
   const template = getInstructionTemplateForMedication(medicationName, context);
-  
+
   if (template) {
     return template;
   }
@@ -183,7 +218,10 @@ export function getInstructionTemplate(
 
   const fallbackContexts = contextMap[context] || [];
   for (const fallbackContext of fallbackContexts) {
-    const fallback = getInstructionTemplateForMedication(medicationName, fallbackContext);
+    const fallback = getInstructionTemplateForMedication(
+      medicationName,
+      fallbackContext,
+    );
     if (fallback) {
       return fallback;
     }
@@ -196,14 +234,18 @@ export function getInstructionTemplate(
 /**
  * Get all available contexts for a medication
  */
-export function getAvailableContextsForMedication(medicationName: string): ReasonContext[] {
+export function getAvailableContextsForMedication(
+  medicationName: string,
+): ReasonContext[] {
   return getContextsForMedication(medicationName);
 }
 
 /**
  * Get all instruction templates for a medication
  */
-export function getAllTemplatesForMedication(medicationName: string): InstructionTemplate[] {
+export function getAllTemplatesForMedication(
+  medicationName: string,
+): InstructionTemplate[] {
   return getTemplatesForMedication(medicationName);
 }
 
@@ -217,7 +259,7 @@ export function getAllTemplatesForMedication(medicationName: string): Instructio
  */
 export function calculateDaySupply(
   quantity: number,
-  template: InstructionTemplate | null
+  template: InstructionTemplate | null,
 ): number {
   if (!template || quantity <= 0) {
     // Default fallback: assume 30-day supply
@@ -226,7 +268,7 @@ export function calculateDaySupply(
 
   // Parse multiplier from daySupplyCalculation string
   const multiplier = parseDaySupplyMultiplier(template.daySupplyCalculation);
-  
+
   if (multiplier > 0) {
     return Math.max(1, Math.round(quantity / multiplier));
   }
@@ -240,7 +282,7 @@ export function calculateDaySupply(
  */
 export function estimateDaySupplyForCustomMedication(
   medicationName: string,
-  quantity: number
+  quantity: number,
 ): number {
   // Common patterns for estimation
   const lowerName = medicationName.toLowerCase();
@@ -269,7 +311,10 @@ export function estimateDaySupplyForCustomMedication(
  * Get warnings for medication + context
  * Returns relevant warnings based on the context
  */
-export function getWarnings(medicationName: string, context: ReasonContext): string[] {
+export function getWarnings(
+  medicationName: string,
+  context: ReasonContext,
+): string[] {
   const template = getInstructionTemplate(medicationName, context);
 
   if (!template) {
@@ -320,7 +365,7 @@ export function getWarnings(medicationName: string, context: ReasonContext): str
 export function getShortDosing(
   medicationName: string,
   context: ReasonContext,
-  quantity?: number
+  quantity?: number,
 ): string {
   const template = getInstructionTemplate(medicationName, context);
 
@@ -334,7 +379,8 @@ export function getShortDosing(
   if (quantity !== undefined && template.daySupplyCalculation) {
     // Parse day supply from calculation string
     const multiplier = parseDaySupplyMultiplier(template.daySupplyCalculation);
-    const daySupply = quantity > 0 && multiplier > 0 ? Math.round(quantity / multiplier) : 0;
+    const daySupply =
+      quantity > 0 && multiplier > 0 ? Math.round(quantity / multiplier) : 0;
     if (daySupply > 0 && daySupply <= 365) {
       dosing += ` (${daySupply}-day supply)`;
     }
@@ -346,7 +392,10 @@ export function getShortDosing(
 /**
  * Get full instructions formatted for patient education
  */
-export function getFullInstructions(medicationName: string, context: ReasonContext): string[] {
+export function getFullInstructions(
+  medicationName: string,
+  context: ReasonContext,
+): string[] {
   const template = getInstructionTemplate(medicationName, context);
 
   if (!template) {
@@ -363,19 +412,21 @@ export function getFullInstructions(medicationName: string, context: ReasonConte
   } else if (Array.isArray(template.fullInstructions)) {
     return template.fullInstructions;
   }
-  
+
   return [];
 }
 
 // Helper to parse day supply multiplier from calculation string
 function parseDaySupplyMultiplier(calculation: string): number {
   if (!calculation) return 1;
-  
-  const match = calculation.match(/(\d+(?:\.\d+)?)\s*(?:tablet|cap|pill|dose|unit).*?(?:per|\/)\s*day/i);
+
+  const match = calculation.match(
+    /(\d+(?:\.\d+)?)\s*(?:tablet|cap|pill|dose|unit).*?(?:per|\/)\s*day/i,
+  );
   if (match) {
     return parseFloat(match[1]);
   }
-  
+
   const numMatch = calculation.match(/(\d+(?:\.\d+)?)/);
   return numMatch ? parseFloat(numMatch[1]) : 1;
 }
@@ -392,7 +443,7 @@ export async function populateLineItemInstructions(
   medicationName: string,
   lotId: string | number,
   reasons: DispenseReason[],
-  quantity: number
+  quantity: number,
 ): Promise<DispensingLineItemData> {
   // Get context from reasons
   const contextResult = getContextFromReasons(reasons);
@@ -420,16 +471,21 @@ export async function populateLineItemInstructions(
   // Check validation result
   if (!lotValidation.valid) {
     const error: InstructionServiceError = new Error(
-      lotValidation.errors.join('; ')
+      lotValidation.errors.join('; '),
     ) as InstructionServiceError;
-    error.code = lotValidation.errors.some(e => e.includes('expired')) ? 'LOT_EXPIRED' : 'LOT_NOT_FOUND';
+    error.code = lotValidation.errors.some((e) => e.includes('expired'))
+      ? 'LOT_EXPIRED'
+      : 'LOT_NOT_FOUND';
     throw error;
   }
 
   const inventory = lotValidation.lot!;
 
   // Get instruction template from database
-  const template = getInstructionTemplate(medicationName, contextResult.context);
+  const template = getInstructionTemplate(
+    medicationName,
+    contextResult.context,
+  );
 
   // Build dosing instructions
   let dosingInstructions: string;
@@ -443,7 +499,7 @@ export async function populateLineItemInstructions(
   if (template) {
     dosingInstructions = template.shortDosing;
     daySupply = calculateDaySupply(quantity, template);
-    
+
     // Parse warnings from JSON
     if (typeof template.warnings === 'string') {
       try {
@@ -454,7 +510,7 @@ export async function populateLineItemInstructions(
     } else if (Array.isArray(template.warnings)) {
       warnings = template.warnings;
     }
-    
+
     indication = template.indication;
     medicationStrength = template.strength || undefined;
 
@@ -507,7 +563,7 @@ export async function populateLineItemInstructions(
  */
 export function validateLotForDispensing(
   lotId: string | number,
-  quantity: number
+  quantity: number,
 ): LotValidationResult {
   let lotValidation: LotValidationResult;
 
@@ -532,7 +588,10 @@ export function validateLotForDispensing(
 }
 
 // Internal wrapper to avoid name collision - delegates to inventory module
-function validateLotForDispensingFromInventory(lotId: number, quantity: number): LotValidationResult {
+function validateLotForDispensingFromInventory(
+  lotId: number,
+  quantity: number,
+): LotValidationResult {
   // Calls the aliased import from inventory queries
   return validateInventoryLot(lotId, quantity);
 }
@@ -551,7 +610,7 @@ export async function populateMultipleLineItems(
     lotId: string | number;
     quantity: number;
   }>,
-  reasons: DispenseReason[]
+  reasons: DispenseReason[],
 ): Promise<{
   items: DispensingLineItemData[];
   globalWarnings: string[];
@@ -565,7 +624,7 @@ export async function populateMultipleLineItems(
   // Check for context conflicts
   if (contextResult.conflictingReasons.length > 0) {
     globalWarnings.push(
-      `Conflicting contexts detected: ${contextResult.conflictingReasons.join(', ')}`
+      `Conflicting contexts detected: ${contextResult.conflictingReasons.join(', ')}`,
     );
   }
 
@@ -577,7 +636,7 @@ export async function populateMultipleLineItems(
         item.medicationName,
         item.lotId,
         reasons,
-        item.quantity
+        item.quantity,
       );
       populatedItems.push(populated);
     } catch (error) {

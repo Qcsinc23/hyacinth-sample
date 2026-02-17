@@ -12,7 +12,12 @@ export type RecordStatus = 'completed' | 'voided' | 'corrected';
 export type InventoryStatus = 'active' | 'expired' | 'depleted' | 'quarantined';
 export type AlertType = 'expiring_soon' | 'low_stock' | 'expired';
 export type AlertSeverity = 'info' | 'warning' | 'critical';
-export type TransactionType = 'receive' | 'dispense' | 'adjustment' | 'return' | 'waste';
+export type TransactionType =
+  | 'receive'
+  | 'dispense'
+  | 'adjustment'
+  | 'return'
+  | 'waste';
 export type DraftType = 'dispense' | 'inventory';
 
 // ============================================================================
@@ -345,7 +350,13 @@ export interface PaginatedQuery {
 // Instruction Service Types
 // ============================================================================
 
-export type ReasonContext = 'treatment' | 'prevention' | 'prophylaxis' | 'pep' | 'prep' | 'other';
+export type ReasonContext =
+  | 'treatment'
+  | 'prevention'
+  | 'prophylaxis'
+  | 'pep'
+  | 'prep'
+  | 'other';
 
 export interface MedicationInstructionTemplate {
   medicationId: string;

@@ -3,12 +3,12 @@
  */
 
 // Core database functions (with encryption support)
-export { 
-  initDatabase, 
-  getDatabase, 
-  closeDatabase, 
-  runSchema, 
-  withTransaction, 
+export {
+  initDatabase,
+  getDatabase,
+  closeDatabase,
+  runSchema,
+  withTransaction,
   checkDatabaseHealth,
   initEncryption,
   isEncryptionReady,
@@ -19,7 +19,12 @@ export {
 } from './db';
 
 // Migrations and seeds
-export { runMigrations, getMigrationStatus, needsMigration, getCurrentVersion } from './migrations';
+export {
+  runMigrations,
+  getMigrationStatus,
+  needsMigration,
+  getCurrentVersion,
+} from './migrations';
 export { runSeedData, hasSeedData } from './seed';
 export {
   initializeDatabase,

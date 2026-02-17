@@ -97,14 +97,20 @@ export function generateDailySummary(date: string): DailySummaryReport {
   const db = getDatabase();
 
   // Get total dispenses for the date
-  const totalResult = db.prepare(`
+  const totalResult = db
+    .prepare(
+      `
     SELECT COUNT(*) as count
     FROM dispensing_records
     WHERE dispensing_date = ? AND status = 'completed'
-  `).get(date) as { count: number };
+  `,
+    )
+    .get(date) as { count: number };
 
   // Get dispenses by medication
-  const byMedication = db.prepare(`
+  const byMedication = db
+    .prepare(
+      `
     SELECT 
       dli.medication_name as medicationName,
       COUNT(*) as count,
@@ -114,10 +120,14 @@ export function generateDailySummary(date: string): DailySummaryReport {
     WHERE dr.dispensing_date = ? AND dr.status = 'completed'
     GROUP BY dli.medication_name
     ORDER BY count DESC
-  `).all(date) as any[];
+  `,
+    )
+    .all(date) as any[];
 
   // Get dispenses by staff
-  const byStaff = db.prepare(`
+  const byStaff = db
+    .prepare(
+      `
     SELECT 
       s.first_name || ' ' || s.last_name as staffName,
       COUNT(*) as count
@@ -126,10 +136,14 @@ export function generateDailySummary(date: string): DailySummaryReport {
     WHERE dr.dispensing_date = ? AND dr.status = 'completed'
     GROUP BY dr.staff_id
     ORDER BY count DESC
-  `).all(date) as any[];
+  `,
+    )
+    .all(date) as any[];
 
   // Get dispenses by reason
-  const byReason = db.prepare(`
+  const byReason = db
+    .prepare(
+      `
     SELECT 
       rr.reason_name as reason,
       COUNT(*) as count
@@ -138,7 +152,9 @@ export function generateDailySummary(date: string): DailySummaryReport {
     WHERE dr.dispensing_date = ? AND dr.status = 'completed'
     GROUP BY rr.reason_name
     ORDER BY count DESC
-  `).all(date) as any[];
+  `,
+    )
+    .all(date) as any[];
 
   return {
     date,
@@ -155,7 +171,9 @@ export function generateDailySummary(date: string): DailySummaryReport {
 export function generateInventoryReport(): InventoryUsageReport {
   const db = getDatabase();
 
-  const items = db.prepare(`
+  const items = db
+    .prepare(
+      `
     SELECT 
       i.medication_name as medicationName,
       i.lot_number as lotNumber,
@@ -168,17 +186,21 @@ export function generateInventoryReport(): InventoryUsageReport {
     WHERE i.status IN ('active', 'depleted')
     GROUP BY i.id
     ORDER BY i.medication_name
-  `).all() as any[];
+  `,
+    )
+    .all() as any[];
 
-  const processedItems = items.map(item => {
-    const depletionRate = item.initialQuantity > 0
-      ? (item.dispensedQuantity / item.initialQuantity) * 100
-      : 0;
+  const processedItems = items.map((item) => {
+    const depletionRate =
+      item.initialQuantity > 0
+        ? (item.dispensedQuantity / item.initialQuantity) * 100
+        : 0;
 
     // Estimate days until depleted (simplified calculation)
-    const daysUntilDepleted = item.currentQuantity > 0 && depletionRate > 0
-      ? Math.ceil((item.currentQuantity / item.dispensedQuantity) * 30) // Assuming 30-day window
-      : undefined;
+    const daysUntilDepleted =
+      item.currentQuantity > 0 && depletionRate > 0
+        ? Math.ceil((item.currentQuantity / item.dispensedQuantity) * 30) // Assuming 30-day window
+        : undefined;
 
     return {
       ...item,
@@ -202,7 +224,9 @@ export function generateExpirationReport(days: number): ExpirationReport {
   const thresholdDate = new Date();
   thresholdDate.setDate(today.getDate() + days);
 
-  const items = db.prepare(`
+  const items = db
+    .prepare(
+      `
     SELECT 
       i.medication_name as medicationName,
       i.lot_number as lotNumber,
@@ -213,33 +237,39 @@ export function generateExpirationReport(days: number): ExpirationReport {
     FROM inventory i
     WHERE i.status IN ('active', 'expired')
     ORDER BY i.expiration_date
-  `).all() as any[];
+  `,
+    )
+    .all() as any[];
 
-  const processedItems = items.map(item => {
-    const expDate = new Date(item.expirationDate);
-    const daysUntilExpiration = Math.ceil(
-      (expDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)
+  const processedItems = items
+    .map((item) => {
+      const expDate = new Date(item.expirationDate);
+      const daysUntilExpiration = Math.ceil(
+        (expDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24),
+      );
+
+      let status: 'expired' | 'expiring_soon' | 'expiring_later';
+      if (expDate < today) {
+        status = 'expired';
+      } else if (daysUntilExpiration <= 30) {
+        status = 'expiring_soon';
+      } else {
+        status = 'expiring_later';
+      }
+
+      return {
+        medicationName: item.medicationName,
+        lotNumber: item.lotNumber,
+        expirationDate: item.expirationDate,
+        daysUntilExpiration,
+        quantityOnHand: item.quantityOnHand,
+        unit: item.unit,
+        status,
+      };
+    })
+    .filter(
+      (item) => item.daysUntilExpiration <= days || item.status === 'expired',
     );
-
-    let status: 'expired' | 'expiring_soon' | 'expiring_later';
-    if (expDate < today) {
-      status = 'expired';
-    } else if (daysUntilExpiration <= 30) {
-      status = 'expiring_soon';
-    } else {
-      status = 'expiring_later';
-    }
-
-    return {
-      medicationName: item.medicationName,
-      lotNumber: item.lotNumber,
-      expirationDate: item.expirationDate,
-      daysUntilExpiration,
-      quantityOnHand: item.quantityOnHand,
-      unit: item.unit,
-      status,
-    };
-  }).filter(item => item.daysUntilExpiration <= days || item.status === 'expired');
 
   return {
     generatedAt: new Date().toISOString(),
@@ -253,7 +283,7 @@ export function generateExpirationReport(days: number): ExpirationReport {
  */
 export function generateStaffActivity(
   staffId: string | null,
-  dateRange: { from: string; to: string }
+  dateRange: { from: string; to: string },
 ): StaffActivityReport {
   const db = getDatabase();
 
@@ -265,7 +295,9 @@ export function generateStaffActivity(
     params.push(parseInt(staffId));
   }
 
-  const staffActivities = db.prepare(`
+  const staffActivities = db
+    .prepare(
+      `
     SELECT 
       s.id as staffId,
       s.first_name || ' ' || s.last_name as staffName,
@@ -280,7 +312,9 @@ export function generateStaffActivity(
     WHERE s.is_active = 1 ${staffFilter}
     GROUP BY s.id
     ORDER BY totalDispenses DESC
-  `).all(...params, ...params) as any[];
+  `,
+    )
+    .all(...params, ...params) as any[];
 
   return {
     dateFrom: dateRange.from,
@@ -296,7 +330,9 @@ export function generateReconciliation(date: string): ReconciliationReport {
   const db = getDatabase();
 
   // Get all inventory items with their state
-  const medications = db.prepare(`
+  const medications = db
+    .prepare(
+      `
     SELECT 
       i.medication_name as medicationName,
       i.quantity_received as openingStock,
@@ -304,10 +340,14 @@ export function generateReconciliation(date: string): ReconciliationReport {
     FROM inventory i
     WHERE date(i.created_at) <= ?
     ORDER BY i.medication_name
-  `).all(date) as any[];
+  `,
+    )
+    .all(date) as any[];
 
   // Get dispensed amounts for the date
-  const dispensed = db.prepare(`
+  const dispensed = db
+    .prepare(
+      `
     SELECT 
       dli.medication_name as medicationName,
       SUM(dli.amount_value) as totalDispensed
@@ -315,10 +355,14 @@ export function generateReconciliation(date: string): ReconciliationReport {
     JOIN dispensing_records dr ON dli.record_id = dr.id
     WHERE dr.dispensing_date = ? AND dr.status = 'completed'
     GROUP BY dli.medication_name
-  `).all(date) as any[];
+  `,
+    )
+    .all(date) as any[];
 
   // Get adjustments for the date
-  const adjustments = db.prepare(`
+  const adjustments = db
+    .prepare(
+      `
     SELECT 
       i.medication_name as medicationName,
       SUM(it.quantity_change) as totalAdjusted
@@ -326,12 +370,18 @@ export function generateReconciliation(date: string): ReconciliationReport {
     JOIN inventory i ON it.inventory_id = i.id
     WHERE date(it.timestamp) = ? AND it.transaction_type = 'adjustment'
     GROUP BY i.medication_name
-  `).all(date) as any[];
+  `,
+    )
+    .all(date) as any[];
 
   // Build medication reconciliation data
-  const medicationData = medications.map(med => {
-    const dispensedForMed = dispensed.find(d => d.medicationName === med.medicationName);
-    const adjustedForMed = adjustments.find(a => a.medicationName === med.medicationName);
+  const medicationData = medications.map((med) => {
+    const dispensedForMed = dispensed.find(
+      (d) => d.medicationName === med.medicationName,
+    );
+    const adjustedForMed = adjustments.find(
+      (a) => a.medicationName === med.medicationName,
+    );
 
     return {
       medicationName: med.medicationName,
@@ -343,10 +393,19 @@ export function generateReconciliation(date: string): ReconciliationReport {
     };
   });
 
-  const totalOpening = medicationData.reduce((sum, m) => sum + m.openingStock, 0);
-  const totalDispensed = medicationData.reduce((sum, m) => sum + m.dispensed, 0);
+  const totalOpening = medicationData.reduce(
+    (sum, m) => sum + m.openingStock,
+    0,
+  );
+  const totalDispensed = medicationData.reduce(
+    (sum, m) => sum + m.dispensed,
+    0,
+  );
   const totalAdjusted = medicationData.reduce((sum, m) => sum + m.adjusted, 0);
-  const totalClosing = medicationData.reduce((sum, m) => sum + m.closingStock, 0);
+  const totalClosing = medicationData.reduce(
+    (sum, m) => sum + m.closingStock,
+    0,
+  );
   const expectedClosing = totalOpening - totalDispensed + totalAdjusted;
 
   return {
@@ -369,15 +428,17 @@ export function generateReconciliation(date: string): ReconciliationReport {
  */
 export function exportToCSV(data: any[], columns: string[]): string {
   const header = columns.join(',');
-  const rows = data.map(row =>
-    columns.map(col => {
-      const value = row[col];
-      if (value === null || value === undefined) return '';
-      if (typeof value === 'string' && value.includes(',')) {
-        return `"${value}"`;
-      }
-      return String(value);
-    }).join(',')
+  const rows = data.map((row) =>
+    columns
+      .map((col) => {
+        const value = row[col];
+        if (value === null || value === undefined) return '';
+        if (typeof value === 'string' && value.includes(',')) {
+          return `"${value}"`;
+        }
+        return String(value);
+      })
+      .join(','),
   );
   return [header, ...rows].join('\n');
 }

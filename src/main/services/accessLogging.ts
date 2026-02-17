@@ -1,16 +1,16 @@
 /**
  * Access Logging Service
- * 
+ *
  * Comprehensive logging of all data access, authentication attempts,
  * data exports, and settings changes for HIPAA compliance.
  */
 
 import log from 'electron-log';
-import { getDatabase } from '../database/db';
 import * as crypto from 'crypto';
+import { getDatabase } from '../database/db';
 
 // Access log entry types
-export type AccessAction = 
+export type AccessAction =
   // Authentication
   | 'LOGIN_SUCCESS'
   | 'LOGIN_FAILURE'
@@ -84,7 +84,9 @@ function generateLogId(): string {
 /**
  * Calculate checksum for tamper-evidence
  */
-function calculateChecksum(entry: Omit<AccessLogEntry, 'id' | 'checksum'>): string {
+function calculateChecksum(
+  entry: Omit<AccessLogEntry, 'id' | 'checksum'>,
+): string {
   const data = JSON.stringify({
     timestamp: entry.timestamp,
     action: entry.action,
@@ -97,7 +99,7 @@ function calculateChecksum(entry: Omit<AccessLogEntry, 'id' | 'checksum'>): stri
     success: entry.success,
     failureReason: entry.failureReason,
   });
-  
+
   return crypto.createHash('sha256').update(data).digest('hex');
 }
 
@@ -110,7 +112,7 @@ export function logDataAccess(
   entityId: string | number,
   staffId: number,
   staffName: string,
-  details?: Record<string, unknown>
+  details?: Record<string, unknown>,
 ): void {
   logAccessEvent({
     action,
@@ -136,7 +138,7 @@ export function logAuthentication(
     ipAddress?: string;
     attempts?: number;
     lockedUntil?: string;
-  }
+  },
 ): void {
   logAccessEvent({
     action,
@@ -149,7 +151,7 @@ export function logAuthentication(
       attempts: options?.attempts,
       lockedUntil: options?.lockedUntil,
     },
-    success: options?.success ?? (action === 'LOGIN_SUCCESS'),
+    success: options?.success ?? action === 'LOGIN_SUCCESS',
     failureReason: options?.failureReason,
   });
 }
@@ -164,7 +166,7 @@ export function logFailedAccess(
   entityType: string,
   entityId: string | number,
   reason: string,
-  details?: Record<string, unknown>
+  details?: Record<string, unknown>,
 ): void {
   logAccessEvent({
     action,
@@ -191,7 +193,7 @@ export function logDataExport(
     filters?: Record<string, unknown>;
     format?: string;
     destination?: string;
-  }
+  },
 ): void {
   logAccessEvent({
     action: 'DATA_EXPORT',
@@ -223,7 +225,7 @@ export function logSettingsChange(
   options?: {
     category?: string;
     reason?: string;
-  }
+  },
 ): void {
   logAccessEvent({
     action: 'SETTINGS_CHANGE',
@@ -256,7 +258,7 @@ export function logMedicationDispensing(
     reasons?: string[];
     voidReason?: string;
     correctionReason?: string;
-  }
+  },
 ): void {
   logAccessEvent({
     action,
@@ -280,7 +282,11 @@ export function logMedicationDispensing(
  * Log inventory changes
  */
 export function logInventoryChange(
-  action: 'INVENTORY_RECEIVE' | 'INVENTORY_ADJUST' | 'INVENTORY_WASTE' | 'INVENTORY_TRANSFER',
+  action:
+    | 'INVENTORY_RECEIVE'
+    | 'INVENTORY_ADJUST'
+    | 'INVENTORY_WASTE'
+    | 'INVENTORY_TRANSFER',
   staffId: number,
   staffName: string,
   inventoryId: number,
@@ -292,7 +298,7 @@ export function logInventoryChange(
     quantityAfter: number;
     reason?: string;
     referenceId?: number;
-  }
+  },
 ): void {
   logAccessEvent({
     action,
@@ -316,18 +322,16 @@ export function logInventoryChange(
 /**
  * Core logging function
  */
-function logAccessEvent(
-  params: {
-    action: AccessAction;
-    staffId: number | null;
-    staffName: string | null;
-    entityType?: string | null;
-    entityId?: string | null;
-    details?: Record<string, unknown>;
-    success: boolean;
-    failureReason?: string;
-  }
-): void {
+function logAccessEvent(params: {
+  action: AccessAction;
+  staffId: number | null;
+  staffName: string | null;
+  entityType?: string | null;
+  entityId?: string | null;
+  details?: Record<string, unknown>;
+  success: boolean;
+  failureReason?: string;
+}): void {
   const entry: AccessLogEntry = {
     id: generateLogId(),
     timestamp: new Date().toISOString(),
@@ -343,19 +347,23 @@ function logAccessEvent(
     failureReason: params.failureReason,
     checksum: '', // Will be calculated
   };
-  
+
   // Calculate checksum
   const { id, checksum, ...dataForChecksum } = entry;
   entry.checksum = calculateChecksum(dataForChecksum);
-  
+
   // Add to buffer
   logBuffer.push(entry);
-  
+
   // Log to electron-log immediately
   const status = entry.success ? 'SUCCESS' : 'FAILED';
-  const entity = entry.entityType ? `${entry.entityType}:${entry.entityId}` : 'SYSTEM';
-  log.info(`[AccessLog] ${entry.action} | ${status} | ${entry.staffName || 'UNKNOWN'} | ${entity}`);
-  
+  const entity = entry.entityType
+    ? `${entry.entityType}:${entry.entityId}`
+    : 'SYSTEM';
+  log.info(
+    `[AccessLog] ${entry.action} | ${status} | ${entry.staffName || 'UNKNOWN'} | ${entity}`,
+  );
+
   // Flush if buffer is full
   if (logBuffer.length >= LOG_BUFFER_SIZE) {
     flushLogBuffer();
@@ -369,7 +377,7 @@ function sanitizeForLog(value: unknown): unknown {
   if (value === null || value === undefined) {
     return value;
   }
-  
+
   // Don't log sensitive values like passwords, PINs, SSNs
   const sensitivePatterns = [
     /pin/i,
@@ -378,16 +386,18 @@ function sanitizeForLog(value: unknown): unknown {
     /social.security/i,
     /credit.card/i,
   ];
-  
+
   if (typeof value === 'object') {
     const sanitized: Record<string, unknown> = {};
     for (const [key, val] of Object.entries(value)) {
-      const isSensitive = sensitivePatterns.some(pattern => pattern.test(key));
+      const isSensitive = sensitivePatterns.some((pattern) =>
+        pattern.test(key),
+      );
       sanitized[key] = isSensitive ? '[REDACTED]' : sanitizeForLog(val);
     }
     return sanitized;
   }
-  
+
   return value;
 }
 
@@ -396,7 +406,7 @@ function sanitizeForLog(value: unknown): unknown {
  */
 function flushLogBuffer(): void {
   if (logBuffer.length === 0) return;
-  
+
   try {
     const db = getDatabase();
     const insertStmt = db.prepare(`
@@ -405,7 +415,7 @@ function flushLogBuffer(): void {
         entity_type, entity_id, details, success, failure_reason, checksum
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
-    
+
     const insertMany = db.transaction((entries: AccessLogEntry[]) => {
       for (const entry of entries) {
         insertStmt.run(
@@ -421,14 +431,14 @@ function flushLogBuffer(): void {
           JSON.stringify(entry.details),
           entry.success ? 1 : 0,
           entry.failureReason || null,
-          entry.checksum
+          entry.checksum,
         );
       }
     });
-    
+
     insertMany(logBuffer);
     log.info(`[AccessLog] Flushed ${logBuffer.length} entries to database`);
-    
+
     logBuffer = [];
   } catch (error) {
     log.error('[AccessLog] Failed to flush log buffer:', error);
@@ -451,60 +461,63 @@ export function getAccessLogs(filters?: {
 }): { logs: AccessLogEntry[]; total: number } {
   try {
     flushLogBuffer(); // Ensure all logs are persisted
-    
+
     const db = getDatabase();
     const conditions: string[] = [];
     const params: (string | number)[] = [];
-    
+
     if (filters?.staffId !== undefined) {
       conditions.push('staff_id = ?');
       params.push(filters.staffId);
     }
-    
+
     if (filters?.action) {
       conditions.push('action = ?');
       params.push(filters.action);
     }
-    
+
     if (filters?.entityType) {
       conditions.push('entity_type = ?');
       params.push(filters.entityType);
     }
-    
+
     if (filters?.startDate) {
       conditions.push('timestamp >= ?');
       params.push(filters.startDate);
     }
-    
+
     if (filters?.endDate) {
       conditions.push('timestamp <= ?');
       params.push(filters.endDate);
     }
-    
+
     if (filters?.success !== undefined) {
       conditions.push('success = ?');
       params.push(filters.success ? 1 : 0);
     }
-    
-    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
-    
+
+    const whereClause =
+      conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+
     // Get total count
-    const countStmt = db.prepare(`SELECT COUNT(*) as count FROM access_log ${whereClause}`);
+    const countStmt = db.prepare(
+      `SELECT COUNT(*) as count FROM access_log ${whereClause}`,
+    );
     const { count } = countStmt.get(...params) as { count: number };
-    
+
     // Get logs
     let sql = `SELECT * FROM access_log ${whereClause} ORDER BY timestamp DESC`;
-    
+
     if (filters?.limit) {
       sql += ' LIMIT ?';
       params.push(filters.limit);
     }
-    
+
     if (filters?.offset) {
       sql += ' OFFSET ?';
       params.push(filters.offset);
     }
-    
+
     const stmt = db.prepare(sql);
     const rows = stmt.all(...params) as Array<{
       id: string;
@@ -521,8 +534,8 @@ export function getAccessLogs(filters?: {
       failure_reason: string | null;
       checksum: string;
     }>;
-    
-    const logs: AccessLogEntry[] = rows.map(row => ({
+
+    const logs: AccessLogEntry[] = rows.map((row) => ({
       id: row.id,
       timestamp: row.timestamp,
       action: row.action,
@@ -537,7 +550,7 @@ export function getAccessLogs(filters?: {
       failureReason: row.failure_reason || undefined,
       checksum: row.checksum,
     }));
-    
+
     return { logs, total: count };
   } catch (error) {
     log.error('[AccessLog] Failed to get access logs:', error);
@@ -548,9 +561,7 @@ export function getAccessLogs(filters?: {
 /**
  * Get failed authentication attempts
  */
-export function getFailedAuthenticationAttempts(
-  minutes: number = 30
-): Array<{
+export function getFailedAuthenticationAttempts(minutes: number = 30): Array<{
   staffName: string | null;
   attempts: number;
   lastAttempt: string;
@@ -558,7 +569,7 @@ export function getFailedAuthenticationAttempts(
   try {
     const db = getDatabase();
     const cutoffTime = new Date(Date.now() - minutes * 60000).toISOString();
-    
+
     const stmt = db.prepare(`
       SELECT 
         staff_name,
@@ -570,7 +581,7 @@ export function getFailedAuthenticationAttempts(
       GROUP BY staff_name
       ORDER BY attempts DESC
     `);
-    
+
     return stmt.all(cutoffTime) as Array<{
       staffName: string | null;
       attempts: number;
@@ -590,7 +601,7 @@ export function setupAccessLogging(): void {
   setInterval(() => {
     flushLogBuffer();
   }, 30000);
-  
+
   log.info('[AccessLog] Access logging initialized');
 }
 

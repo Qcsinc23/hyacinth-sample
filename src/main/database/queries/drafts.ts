@@ -12,36 +12,46 @@ import type { Draft, CreateDraftInput, DraftType } from '../../../shared/types';
 export function saveDraft(input: CreateDraftInput): Draft {
   const db = getDatabase();
   const now = new Date().toISOString();
-  
+
   // Check if draft already exists for this type and staff
-  const existing = db.prepare(`
+  const existing = db
+    .prepare(
+      `
     SELECT id FROM drafts 
     WHERE draft_type = ? AND staff_id = ?
-  `).get(input.draft_type, input.staff_id) as { id: number } | undefined;
-  
+  `,
+    )
+    .get(input.draft_type, input.staff_id) as { id: number } | undefined;
+
   if (existing) {
     // Update existing
-    db.prepare(`
+    db.prepare(
+      `
       UPDATE drafts 
       SET form_data = ?, updated_at = ?
       WHERE id = ?
-    `).run(JSON.stringify(input.form_data), now, existing.id);
-    
+    `,
+    ).run(JSON.stringify(input.form_data), now, existing.id);
+
     return getDraftById(existing.id)!;
   }
-  
+
   // Create new
-  const result = db.prepare(`
+  const result = db
+    .prepare(
+      `
     INSERT INTO drafts (draft_type, form_data, staff_id, created_at, updated_at)
     VALUES (?, ?, ?, ?, ?)
-  `).run(
-    input.draft_type,
-    JSON.stringify(input.form_data),
-    input.staff_id,
-    now,
-    now
-  );
-  
+  `,
+    )
+    .run(
+      input.draft_type,
+      JSON.stringify(input.form_data),
+      input.staff_id,
+      now,
+      now,
+    );
+
   return getDraftById(Number(result.lastInsertRowid))!;
 }
 
@@ -50,35 +60,44 @@ export function saveDraft(input: CreateDraftInput): Draft {
  */
 export function getDraftById(id: number): Draft | null {
   const db = getDatabase();
-  const row = db.prepare('SELECT * FROM drafts WHERE id = ?').get(id) as Draft | null;
-  
+  const row = db
+    .prepare('SELECT * FROM drafts WHERE id = ?')
+    .get(id) as Draft | null;
+
   if (row) {
     return {
       ...row,
       form_data: JSON.parse(row.form_data as unknown as string),
     };
   }
-  
+
   return null;
 }
 
 /**
  * Get draft by type and staff
  */
-export function getDraftByTypeAndStaff(draftType: DraftType, staffId: number): Draft | null {
+export function getDraftByTypeAndStaff(
+  draftType: DraftType,
+  staffId: number,
+): Draft | null {
   const db = getDatabase();
-  const row = db.prepare(`
+  const row = db
+    .prepare(
+      `
     SELECT * FROM drafts 
     WHERE draft_type = ? AND staff_id = ?
-  `).get(draftType, staffId) as Draft | null;
-  
+  `,
+    )
+    .get(draftType, staffId) as Draft | null;
+
   if (row) {
     return {
       ...row,
       form_data: JSON.parse(row.form_data as unknown as string),
     };
   }
-  
+
   return null;
 }
 
@@ -87,13 +106,17 @@ export function getDraftByTypeAndStaff(draftType: DraftType, staffId: number): D
  */
 export function getDraftsByStaff(staffId: number): Draft[] {
   const db = getDatabase();
-  const rows = db.prepare(`
+  const rows = db
+    .prepare(
+      `
     SELECT * FROM drafts 
     WHERE staff_id = ?
     ORDER BY updated_at DESC
-  `).all(staffId) as Draft[];
-  
-  return rows.map(row => ({
+  `,
+    )
+    .all(staffId) as Draft[];
+
+  return rows.map((row) => ({
     ...row,
     form_data: JSON.parse(row.form_data as unknown as string),
   }));
@@ -104,14 +127,18 @@ export function getDraftsByStaff(staffId: number): Draft[] {
  */
 export function getAllDrafts(): Draft[] {
   const db = getDatabase();
-  const rows = db.prepare(`
+  const rows = db
+    .prepare(
+      `
     SELECT d.*, s.first_name || ' ' || s.last_name as staff_name
     FROM drafts d
     JOIN staff_members s ON d.staff_id = s.id
     ORDER BY d.updated_at DESC
-  `).all() as Draft[];
-  
-  return rows.map(row => ({
+  `,
+    )
+    .all() as Draft[];
+
+  return rows.map((row) => ({
     ...row,
     form_data: JSON.parse(row.form_data as unknown as string),
   }));
@@ -129,12 +156,19 @@ export function deleteDraft(id: number): boolean {
 /**
  * Delete drafts by type and staff
  */
-export function deleteDraftByTypeAndStaff(draftType: DraftType, staffId: number): boolean {
+export function deleteDraftByTypeAndStaff(
+  draftType: DraftType,
+  staffId: number,
+): boolean {
   const db = getDatabase();
-  const result = db.prepare(`
+  const result = db
+    .prepare(
+      `
     DELETE FROM drafts 
     WHERE draft_type = ? AND staff_id = ?
-  `).run(draftType, staffId);
+  `,
+    )
+    .run(draftType, staffId);
   return result.changes > 0;
 }
 
@@ -143,7 +177,9 @@ export function deleteDraftByTypeAndStaff(draftType: DraftType, staffId: number)
  */
 export function deleteAllDraftsForStaff(staffId: number): number {
   const db = getDatabase();
-  const result = db.prepare('DELETE FROM drafts WHERE staff_id = ?').run(staffId);
+  const result = db
+    .prepare('DELETE FROM drafts WHERE staff_id = ?')
+    .run(staffId);
   return result.changes;
 }
 
@@ -152,9 +188,13 @@ export function deleteAllDraftsForStaff(staffId: number): number {
  */
 export function getDraftCount(staffId: number): number {
   const db = getDatabase();
-  const result = db.prepare(`
+  const result = db
+    .prepare(
+      `
     SELECT COUNT(*) as count FROM drafts WHERE staff_id = ?
-  `).get(staffId) as { count: number };
+  `,
+    )
+    .get(staffId) as { count: number };
   return result.count;
 }
 
@@ -166,10 +206,14 @@ export function cleanupOldDrafts(olderThanDays: number): number {
   const cutoffDate = new Date();
   cutoffDate.setDate(cutoffDate.getDate() - olderThanDays);
   const cutoffStr = cutoffDate.toISOString();
-  
-  const result = db.prepare(`
+
+  const result = db
+    .prepare(
+      `
     DELETE FROM drafts WHERE updated_at < ?
-  `).run(cutoffStr);
-  
+  `,
+    )
+    .run(cutoffStr);
+
   return result.changes;
 }

@@ -4,34 +4,42 @@
  */
 
 import { getDatabase } from '../db';
-import type { InventoryAlert, AlertType, AlertSeverity } from '../../../shared/types';
+import type {
+  InventoryAlert,
+  AlertType,
+  AlertSeverity,
+} from '../../../shared/types';
 
 /**
  * Get active (unacknowledged) alerts
  */
-export function getActiveAlerts(options: {
-  severity?: AlertSeverity;
-  alertType?: AlertType;
-  limit?: number;
-} = {}): InventoryAlert[] {
+export function getActiveAlerts(
+  options: {
+    severity?: AlertSeverity;
+    alertType?: AlertType;
+    limit?: number;
+  } = {},
+): InventoryAlert[] {
   const db = getDatabase();
-  
+
   let whereClause = 'WHERE is_acknowledged = 0';
   const params: (string | number)[] = [];
-  
+
   if (options.severity) {
     whereClause += ' AND severity = ?';
     params.push(options.severity);
   }
-  
+
   if (options.alertType) {
     whereClause += ' AND alert_type = ?';
     params.push(options.alertType);
   }
-  
+
   const limit = options.limit || 100;
-  
-  return db.prepare(`
+
+  return db
+    .prepare(
+      `
     SELECT a.*, 
            i.medication_name, i.lot_number, i.quantity_on_hand,
            s.first_name || ' ' || s.last_name as acknowledged_by_name
@@ -47,50 +55,60 @@ export function getActiveAlerts(options: {
       END,
       a.created_at DESC
     LIMIT ?
-  `).all(...params, limit) as InventoryAlert[];
+  `,
+    )
+    .all(...params, limit) as InventoryAlert[];
 }
 
 /**
  * Get all alerts (including acknowledged)
  */
-export function getAllAlerts(options: {
-  acknowledged?: boolean;
-  severity?: AlertSeverity;
-  alertType?: AlertType;
-  page?: number;
-  pageSize?: number;
-} = {}): { data: InventoryAlert[]; total: number } {
+export function getAllAlerts(
+  options: {
+    acknowledged?: boolean;
+    severity?: AlertSeverity;
+    alertType?: AlertType;
+    page?: number;
+    pageSize?: number;
+  } = {},
+): { data: InventoryAlert[]; total: number } {
   const db = getDatabase();
-  
+
   const page = options.page || 1;
   const pageSize = options.pageSize || 20;
   const offset = (page - 1) * pageSize;
-  
+
   let whereClause = 'WHERE 1=1';
   const params: (string | number | boolean)[] = [];
-  
+
   if (options.acknowledged !== undefined) {
     whereClause += ' AND is_acknowledged = ?';
     params.push(options.acknowledged ? 1 : 0);
   }
-  
+
   if (options.severity) {
     whereClause += ' AND severity = ?';
     params.push(options.severity);
   }
-  
+
   if (options.alertType) {
     whereClause += ' AND alert_type = ?';
     params.push(options.alertType);
   }
-  
+
   // Get count
-  const countResult = db.prepare(`
+  const countResult = db
+    .prepare(
+      `
     SELECT COUNT(*) as total FROM inventory_alerts ${whereClause}
-  `).get(...params) as { total: number };
-  
+  `,
+    )
+    .get(...params) as { total: number };
+
   // Get data
-  const data = db.prepare(`
+  const data = db
+    .prepare(
+      `
     SELECT a.*, 
            i.medication_name, i.lot_number,
            s.first_name || ' ' || s.last_name as acknowledged_by_name
@@ -100,8 +118,10 @@ export function getAllAlerts(options: {
     ${whereClause}
     ORDER BY a.created_at DESC
     LIMIT ? OFFSET ?
-  `).all(...params, pageSize, offset) as InventoryAlert[];
-  
+  `,
+    )
+    .all(...params, pageSize, offset) as InventoryAlert[];
+
   return {
     data,
     total: countResult.total,
@@ -111,18 +131,23 @@ export function getAllAlerts(options: {
 /**
  * Acknowledge an alert
  */
-export function acknowledgeAlert(alertId: number, staffId: number): InventoryAlert {
+export function acknowledgeAlert(
+  alertId: number,
+  staffId: number,
+): InventoryAlert {
   const db = getDatabase();
   const now = new Date().toISOString();
-  
-  db.prepare(`
+
+  db.prepare(
+    `
     UPDATE inventory_alerts 
     SET is_acknowledged = 1, 
         acknowledged_by = ?, 
         acknowledged_at = ?
     WHERE id = ?
-  `).run(staffId, now, alertId);
-  
+  `,
+  ).run(staffId, now, alertId);
+
   const alert = getAlertById(alertId);
   if (!alert) {
     throw new Error(`Failed to acknowledge alert ${alertId}: alert not found`);
@@ -133,18 +158,25 @@ export function acknowledgeAlert(alertId: number, staffId: number): InventoryAle
 /**
  * Acknowledge all alerts for an inventory item
  */
-export function acknowledgeAlertsForInventory(inventoryId: number, staffId: number): number {
+export function acknowledgeAlertsForInventory(
+  inventoryId: number,
+  staffId: number,
+): number {
   const db = getDatabase();
   const now = new Date().toISOString();
-  
-  const result = db.prepare(`
+
+  const result = db
+    .prepare(
+      `
     UPDATE inventory_alerts 
     SET is_acknowledged = 1, 
         acknowledged_by = ?, 
         acknowledged_at = ?
     WHERE inventory_id = ? AND is_acknowledged = 0
-  `).run(staffId, now, inventoryId);
-  
+  `,
+    )
+    .run(staffId, now, inventoryId);
+
   return result.changes;
 }
 
@@ -153,7 +185,9 @@ export function acknowledgeAlertsForInventory(inventoryId: number, staffId: numb
  */
 export function getAlertById(id: number): InventoryAlert | null {
   const db = getDatabase();
-  return db.prepare(`
+  return db
+    .prepare(
+      `
     SELECT a.*, 
            i.medication_name, i.lot_number,
            s.first_name || ' ' || s.last_name as acknowledged_by_name
@@ -161,7 +195,9 @@ export function getAlertById(id: number): InventoryAlert | null {
     JOIN inventory i ON a.inventory_id = i.id
     LEFT JOIN staff_members s ON a.acknowledged_by = s.id
     WHERE a.id = ?
-  `).get(id) as InventoryAlert | null;
+  `,
+    )
+    .get(id) as InventoryAlert | null;
 }
 
 /**
@@ -175,13 +211,31 @@ export function getAlertCounts(): {
   unacknowledged: number;
 } {
   const db = getDatabase();
-  
-  const total = db.prepare('SELECT COUNT(*) as count FROM inventory_alerts').get() as { count: number };
-  const critical = db.prepare("SELECT COUNT(*) as count FROM inventory_alerts WHERE severity = 'critical' AND is_acknowledged = 0").get() as { count: number };
-  const warning = db.prepare("SELECT COUNT(*) as count FROM inventory_alerts WHERE severity = 'warning' AND is_acknowledged = 0").get() as { count: number };
-  const info = db.prepare("SELECT COUNT(*) as count FROM inventory_alerts WHERE severity = 'info' AND is_acknowledged = 0").get() as { count: number };
-  const unacknowledged = db.prepare('SELECT COUNT(*) as count FROM inventory_alerts WHERE is_acknowledged = 0').get() as { count: number };
-  
+
+  const total = db
+    .prepare('SELECT COUNT(*) as count FROM inventory_alerts')
+    .get() as { count: number };
+  const critical = db
+    .prepare(
+      "SELECT COUNT(*) as count FROM inventory_alerts WHERE severity = 'critical' AND is_acknowledged = 0",
+    )
+    .get() as { count: number };
+  const warning = db
+    .prepare(
+      "SELECT COUNT(*) as count FROM inventory_alerts WHERE severity = 'warning' AND is_acknowledged = 0",
+    )
+    .get() as { count: number };
+  const info = db
+    .prepare(
+      "SELECT COUNT(*) as count FROM inventory_alerts WHERE severity = 'info' AND is_acknowledged = 0",
+    )
+    .get() as { count: number };
+  const unacknowledged = db
+    .prepare(
+      'SELECT COUNT(*) as count FROM inventory_alerts WHERE is_acknowledged = 0',
+    )
+    .get() as { count: number };
+
   return {
     total: total.count,
     critical: critical.count,
@@ -198,17 +252,21 @@ export function createAlert(
   inventoryId: number,
   alertType: AlertType,
   severity: AlertSeverity,
-  message: string
+  message: string,
 ): InventoryAlert {
   const db = getDatabase();
   const now = new Date().toISOString();
-  
-  const result = db.prepare(`
+
+  const result = db
+    .prepare(
+      `
     INSERT INTO inventory_alerts (
       inventory_id, alert_type, severity, message, created_at
     ) VALUES (?, ?, ?, ?, ?)
-  `).run(inventoryId, alertType, severity, message, now);
-  
+  `,
+    )
+    .run(inventoryId, alertType, severity, message, now);
+
   const created = getAlertById(Number(result.lastInsertRowid));
   if (!created) {
     throw new Error('Failed to create alert: record not found after insert');
@@ -222,12 +280,14 @@ export function createAlert(
 export function resolveAlert(alertId: number): void {
   const db = getDatabase();
   const now = new Date().toISOString();
-  
-  db.prepare(`
+
+  db.prepare(
+    `
     UPDATE inventory_alerts 
     SET auto_resolved = 1, resolved_at = ?
     WHERE id = ? AND is_acknowledged = 0
-  `).run(now, alertId);
+  `,
+  ).run(now, alertId);
 }
 
 /**
@@ -238,13 +298,17 @@ export function cleanupOldAlerts(olderThanDays: number): number {
   const cutoffDate = new Date();
   cutoffDate.setDate(cutoffDate.getDate() - olderThanDays);
   const cutoffStr = cutoffDate.toISOString();
-  
-  const result = db.prepare(`
+
+  const result = db
+    .prepare(
+      `
     DELETE FROM inventory_alerts 
     WHERE (is_acknowledged = 1 OR auto_resolved = 1) 
     AND created_at < ?
-  `).run(cutoffStr);
-  
+  `,
+    )
+    .run(cutoffStr);
+
   return result.changes;
 }
 
@@ -256,20 +320,24 @@ export function checkForExpiredItems(): void {
   const { checkAndCreateAlerts, getInventoryById } = require('./inventory');
   const db = getDatabase();
   const today = new Date().toISOString().split('T')[0];
-  
+
   // Get all active inventory items
-  const activeItems = db.prepare(`
+  const activeItems = db
+    .prepare(
+      `
     SELECT id FROM inventory 
     WHERE status = 'active' AND quantity_on_hand > 0
-  `).all() as Array<{ id: number }>;
-  
+  `,
+    )
+    .all() as Array<{ id: number }>;
+
   let expiredCount = 0;
   let expiringCount = 0;
-  
+
   for (const item of activeItems) {
     const inventory = getInventoryById(item.id);
     if (!inventory) continue;
-    
+
     // Check expiration
     if (inventory.expiration_date < today) {
       expiredCount++;
@@ -278,22 +346,24 @@ export function checkForExpiredItems(): void {
       const thirtyDaysFromNow = new Date();
       thirtyDaysFromNow.setDate(thirtyDaysFromNow.getDate() + 30);
       const thirtyDaysStr = thirtyDaysFromNow.toISOString().split('T')[0];
-      
+
       if (inventory.expiration_date <= thirtyDaysStr) {
         expiringCount++;
       }
     }
-    
+
     // This will create alerts if needed
     checkAndCreateAlerts(item.id);
   }
-  
+
   const log = require('electron-log');
   if (expiredCount > 0) {
     log.warn(`Found ${expiredCount} expired medication lot(s)`);
   }
   if (expiringCount > 0) {
-    log.info(`Found ${expiringCount} medication lot(s) expiring within 30 days`);
+    log.info(
+      `Found ${expiringCount} medication lot(s) expiring within 30 days`,
+    );
   }
   log.info(`Checked ${activeItems.length} inventory items for expiration`);
 }

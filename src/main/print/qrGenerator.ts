@@ -134,7 +134,8 @@ export function decodeQRData(encoded: string): QRCodeData {
       patientId: parts[1],
       patientChartNumber: parts[2],
     };
-  } else if (encoded.startsWith('MED:')) {
+  }
+  if (encoded.startsWith('MED:')) {
     const parts = encoded.split(':');
     return {
       type: 'medication',
@@ -142,7 +143,8 @@ export function decodeQRData(encoded: string): QRCodeData {
       medicationName: parts[2],
       lotNumber: parts[3],
     };
-  } else if (encoded.startsWith('INV:')) {
+  }
+  if (encoded.startsWith('INV:')) {
     const parts = encoded.split(':');
     return {
       type: 'inventory',
@@ -150,13 +152,12 @@ export function decodeQRData(encoded: string): QRCodeData {
       expirationDate: parts[2],
       medicationName: parts[3],
     };
-  } else {
-    return {
-      type: 'url',
-      url: encoded,
-      rawData: encoded,
-    };
   }
+  return {
+    type: 'url',
+    url: encoded,
+    rawData: encoded,
+  };
 }
 
 /**
@@ -167,7 +168,7 @@ export async function drawQRCodeOnPage(
   data: QRCodeData | string,
   x: number,
   y: number,
-  size: number = 50
+  size: number = 50,
 ): Promise<void> {
   try {
     const encodedData = typeof data === 'string' ? data : encodeQRData(data);
@@ -199,7 +200,7 @@ export async function drawQRCodeOnPage(
  */
 export async function generateQRCodePDF(
   data: QRCodeData | string,
-  label?: string
+  label?: string,
 ): Promise<Uint8Array> {
   try {
     const pdfDoc = await PDFDocument.create();
@@ -212,7 +213,7 @@ export async function generateQRCodePDF(
     if (label) {
       const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
       page.drawText(label, {
-        x: 100 - (label.length * 3),
+        x: 100 - label.length * 3,
         y: 40,
         font,
         size: 10,
@@ -230,7 +231,7 @@ export async function generateQRCodePDF(
  * Generate QR codes for multiple items
  */
 export async function generateQRCodeSheet(
-  items: Array<{ data: QRCodeData | string; label?: string }>
+  items: Array<{ data: QRCodeData | string; label?: string }>,
 ): Promise<Uint8Array> {
   try {
     const pdfDoc = await PDFDocument.create();
@@ -283,7 +284,7 @@ export async function generateQRCodeSheet(
 export async function generatePatientWristbandQR(
   patientId: string,
   chartNumber: string,
-  _patientName: string
+  _patientName: string,
 ): Promise<Uint8Array> {
   const data: QRCodeData = {
     type: 'patient',
@@ -301,7 +302,7 @@ export async function generateMedicationBottleQR(
   medicationId: string,
   medicationName: string,
   lotNumber: string,
-  _expirationDate: string
+  _expirationDate: string,
 ): Promise<Uint8Array> {
   const data: QRCodeData = {
     type: 'medication',

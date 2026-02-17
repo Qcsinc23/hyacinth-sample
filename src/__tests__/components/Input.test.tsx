@@ -48,8 +48,9 @@ describe('Input', () => {
     it('should show required indicator when required', () => {
       render(<Input label="Required Field" id="required" required />);
       const label = screen.getByText('Required Field');
-      expect(label.nextSibling).toHaveTextContent('*');
-      expect(label.nextSibling).toHaveClass('text-red-500');
+      const requiredIndicator = screen.getByText('*');
+      expect(requiredIndicator).toHaveClass('text-red-500');
+      expect(label.parentElement).toContainElement(requiredIndicator);
     });
   });
 

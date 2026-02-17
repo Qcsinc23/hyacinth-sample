@@ -3,11 +3,10 @@
  * Manages print jobs with queue, retry logic, and history tracking
  */
 
-import { ipcMain, BrowserWindow, IpcMainInvokeEvent } from 'electron';
+import { ipcMain, BrowserWindow, IpcMainInvokeEvent, shell } from 'electron';
 import log from 'electron-log';
 import path from 'path';
 import fs from 'fs';
-import { shell } from 'electron';
 import type { LabelData, LabelPrintOptions } from '../print/labelPrinter';
 import type { ReceiptData, ReceiptOptions } from '../print/receiptPrinter';
 import type { QRCodeData } from '../print/qrGenerator';
@@ -20,7 +19,12 @@ import qrGenerator from '../print/qrGenerator';
 // ============================================================================
 
 export type PrintJobType = 'label' | 'receipt' | 'qr_code' | 'report';
-export type PrintJobStatus = 'pending' | 'printing' | 'completed' | 'failed' | 'cancelled';
+export type PrintJobStatus =
+  | 'pending'
+  | 'printing'
+  | 'completed'
+  | 'failed'
+  | 'cancelled';
 
 export interface PrintJob {
   id: string;
@@ -87,7 +91,7 @@ export function setMainWindow(window: BrowserWindow): void {
 export function addToQueue(
   type: PrintJobType,
   data: unknown,
-  options: PrintOptions = {}
+  options: PrintOptions = {},
 ): PrintJob {
   const job: PrintJob = {
     id: generateJobId(),
@@ -122,14 +126,16 @@ export function getQueue(): PrintJob[] {
  * Get pending jobs count
  */
 export function getPendingCount(): number {
-  return printQueue.filter(job => job.status === 'pending').length;
+  return printQueue.filter((job) => job.status === 'pending').length;
 }
 
 /**
  * Cancel a pending job
  */
 export function cancelJob(jobId: string): boolean {
-  const jobIndex = printQueue.findIndex(job => job.id === jobId && job.status === 'pending');
+  const jobIndex = printQueue.findIndex(
+    (job) => job.id === jobId && job.status === 'pending',
+  );
   if (jobIndex !== -1) {
     printQueue[jobIndex].status = 'cancelled';
     printQueue.splice(jobIndex, 1);
@@ -145,11 +151,16 @@ export function cancelJob(jobId: string): boolean {
 export function clearCompletedJobs(): void {
   const initialLength = printQueue.length;
   for (let i = printQueue.length - 1; i >= 0; i--) {
-    if (printQueue[i].status === 'completed' || printQueue[i].status === 'cancelled') {
+    if (
+      printQueue[i].status === 'completed' ||
+      printQueue[i].status === 'cancelled'
+    ) {
       printQueue.splice(i, 1);
     }
   }
-  log.info(`[PrintService] Cleared ${initialLength - printQueue.length} completed jobs`);
+  log.info(
+    `[PrintService] Cleared ${initialLength - printQueue.length} completed jobs`,
+  );
 }
 
 // ============================================================================
@@ -212,9 +223,14 @@ async function processQueue(): Promise<void> {
           error: job.error,
         });
 
-        log.error(`[PrintService] Job ${job.id} failed after ${MAX_RETRIES} retries:`, error);
+        log.error(
+          `[PrintService] Job ${job.id} failed after ${MAX_RETRIES} retries:`,
+          error,
+        );
       } else {
-        log.warn(`[PrintService] Job ${job.id} failed, retrying (${job.retryCount}/${MAX_RETRIES})...`);
+        log.warn(
+          `[PrintService] Job ${job.id} failed, retrying (${job.retryCount}/${MAX_RETRIES})...`,
+        );
         job.status = 'pending';
         await delay(RETRY_DELAY_MS);
         continue; // Don't remove from queue, will retry
@@ -234,10 +250,16 @@ async function processQueue(): Promise<void> {
 async function executePrintJob(job: PrintJob): Promise<void> {
   switch (job.type) {
     case 'label':
-      await printLabel(job.data as LabelData, job.options as PrintOptions & LabelPrintOptions);
+      await printLabel(
+        job.data as LabelData,
+        job.options as PrintOptions & LabelPrintOptions,
+      );
       break;
     case 'receipt':
-      await printReceipt(job.data as ReceiptData, job.options as PrintOptions & ReceiptOptions);
+      await printReceipt(
+        job.data as ReceiptData,
+        job.options as PrintOptions & ReceiptOptions,
+      );
       break;
     case 'qr_code':
       await printQRCode(job.data as QRCodeData, job.options);
@@ -256,7 +278,7 @@ async function executePrintJob(job: PrintJob): Promise<void> {
  */
 export async function printLabel(
   data: LabelData,
-  options: PrintOptions & LabelPrintOptions = {}
+  options: PrintOptions & LabelPrintOptions = {},
 ): Promise<string> {
   try {
     // Generate PDF
@@ -288,7 +310,7 @@ export async function printLabel(
  */
 export async function printLabelSheet(
   labels: LabelData[],
-  options: PrintOptions & LabelPrintOptions = {}
+  options: PrintOptions & LabelPrintOptions = {},
 ): Promise<string> {
   try {
     const pdfBytes = await labelPrinter.generateLabelSheet(labels, {
@@ -318,13 +340,13 @@ export async function printLabelSheet(
  */
 export async function printReceipt(
   data: ReceiptData,
-  options: PrintOptions & ReceiptOptions = {}
+  options: PrintOptions & ReceiptOptions = {},
 ): Promise<string> {
   try {
     const pdfBytes = await receiptPrinter.generateReceipt(data, {
       includeSignatureLine: options.includeSignatureLine ?? true,
       includeDisclaimer: options.includeDisclaimer ?? true,
-      paperSize: options.paperSize as 'letter' | 'thermal' | 'a4' || 'letter',
+      paperSize: (options.paperSize as 'letter' | 'thermal' | 'a4') || 'letter',
     });
 
     const filename = `receipt_${Date.now()}_${data.receiptNumber}.pdf`;
@@ -348,7 +370,7 @@ export async function printReceipt(
  */
 export async function printQRCode(
   data: QRCodeData,
-  options: PrintOptions = {}
+  options: PrintOptions = {},
 ): Promise<string> {
   try {
     const pdfBytes = await qrGenerator.generateQRCodePDF(data);
@@ -374,7 +396,10 @@ export async function printQRCode(
 /**
  * Send PDF to printer
  */
-async function sendToPrinter(filePath: string, options: PrintOptions): Promise<void> {
+async function sendToPrinter(
+  filePath: string,
+  options: PrintOptions,
+): Promise<void> {
   if (!mainWindow) {
     throw new Error('Main window not available for printing');
   }
@@ -386,7 +411,9 @@ async function sendToPrinter(filePath: string, options: PrintOptions): Promise<v
     // On macOS, we can use lp command
     if (process.platform === 'darwin') {
       const { exec } = require('child_process');
-      const printerOption = options.printerName ? `-d "${options.printerName}"` : '';
+      const printerOption = options.printerName
+        ? `-d "${options.printerName}"`
+        : '';
       exec(`lp ${printerOption} "${filePath}"`, (error: Error | null) => {
         if (error) {
           log.error('[PrintService] macOS print command failed:', error);
@@ -400,7 +427,9 @@ async function sendToPrinter(filePath: string, options: PrintOptions): Promise<v
     } else {
       // Linux: use lp command
       const { exec } = require('child_process');
-      const printerOption = options.printerName ? `-d "${options.printerName}"` : '';
+      const printerOption = options.printerName
+        ? `-d "${options.printerName}"`
+        : '';
       exec(`lp ${printerOption} "${filePath}"`, (error: Error | null) => {
         if (error) {
           log.error('[PrintService] Linux print command failed:', error);
@@ -470,7 +499,7 @@ function generateJobId(): string {
 }
 
 function delay(ms: number): Promise<void> {
-  return new Promise(resolve => setTimeout(resolve, ms));
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 // ============================================================================
@@ -478,64 +507,104 @@ function delay(ms: number): Promise<void> {
 // ============================================================================
 
 export function registerPrintIpcHandlers(): void {
-  ipcMain.handle('print:label', async (_event: IpcMainInvokeEvent, data: LabelData, options: PrintOptions) => {
-    const job = addToQueue('label', data, options);
-    return { jobId: job.id, status: job.status };
-  });
+  ipcMain.handle(
+    'print:label',
+    async (
+      _event: IpcMainInvokeEvent,
+      data: LabelData,
+      options: PrintOptions,
+    ) => {
+      const job = addToQueue('label', data, options);
+      return { jobId: job.id, status: job.status };
+    },
+  );
 
-  ipcMain.handle('print:receipt', async (_event: IpcMainInvokeEvent, data: ReceiptData, options: PrintOptions) => {
-    const job = addToQueue('receipt', data, options);
-    return { jobId: job.id, status: job.status };
-  });
+  ipcMain.handle(
+    'print:receipt',
+    async (
+      _event: IpcMainInvokeEvent,
+      data: ReceiptData,
+      options: PrintOptions,
+    ) => {
+      const job = addToQueue('receipt', data, options);
+      return { jobId: job.id, status: job.status };
+    },
+  );
 
-  ipcMain.handle('print:labelSheet', async (_event: IpcMainInvokeEvent, labels: LabelData[], options: PrintOptions) => {
-    try {
-      const filePath = await printLabelSheet(labels, options);
-      return { success: true, filePath };
-    } catch (error) {
-      return { success: false, error: (error as Error).message };
-    }
-  });
+  ipcMain.handle(
+    'print:labelSheet',
+    async (
+      _event: IpcMainInvokeEvent,
+      labels: LabelData[],
+      options: PrintOptions,
+    ) => {
+      try {
+        const filePath = await printLabelSheet(labels, options);
+        return { success: true, filePath };
+      } catch (error) {
+        return { success: false, error: (error as Error).message };
+      }
+    },
+  );
 
-  ipcMain.handle('print:qrCode', async (_event: IpcMainInvokeEvent, data: QRCodeData, options: PrintOptions) => {
-    const job = addToQueue('qr_code', data, options);
-    return { jobId: job.id, status: job.status };
-  });
+  ipcMain.handle(
+    'print:qrCode',
+    async (
+      _event: IpcMainInvokeEvent,
+      data: QRCodeData,
+      options: PrintOptions,
+    ) => {
+      const job = addToQueue('qr_code', data, options);
+      return { jobId: job.id, status: job.status };
+    },
+  );
 
-  ipcMain.handle('print:preview', async (_event: IpcMainInvokeEvent, filePath: string) => {
-    try {
-      await shell.openPath(filePath);
-      return { success: true };
-    } catch (error) {
-      return { success: false, error: (error as Error).message };
-    }
-  });
+  ipcMain.handle(
+    'print:preview',
+    async (_event: IpcMainInvokeEvent, filePath: string) => {
+      try {
+        await shell.openPath(filePath);
+        return { success: true };
+      } catch (error) {
+        return { success: false, error: (error as Error).message };
+      }
+    },
+  );
 
   ipcMain.handle('print:getQueue', () => {
     return getQueue();
   });
 
-  ipcMain.handle('print:getHistory', (_event: IpcMainInvokeEvent, limit?: number) => {
-    return getHistory(limit);
-  });
+  ipcMain.handle(
+    'print:getHistory',
+    (_event: IpcMainInvokeEvent, limit?: number) => {
+      return getHistory(limit);
+    },
+  );
 
-  ipcMain.handle('print:cancelJob', (_event: IpcMainInvokeEvent, jobId: string) => {
-    return cancelJob(jobId);
-  });
+  ipcMain.handle(
+    'print:cancelJob',
+    (_event: IpcMainInvokeEvent, jobId: string) => {
+      return cancelJob(jobId);
+    },
+  );
 
   ipcMain.handle('print:clearHistory', () => {
     clearHistory();
     return { success: true };
   });
 
-  ipcMain.handle('print:exportHistory', (_event: IpcMainInvokeEvent, filePath: string) => {
-    try {
-      exportHistory(filePath);
-      return { success: true };
-    } catch (error) {
-      return { success: false, error: (error as Error).message };
-    }
-  });
+  ipcMain.handle(
+    'print:exportHistory',
+    (_event: IpcMainInvokeEvent, filePath: string) => {
+      try {
+        exportHistory(filePath);
+        return { success: true };
+      } catch (error) {
+        return { success: false, error: (error as Error).message };
+      }
+    },
+  );
 
   log.info('[PrintService] IPC handlers registered');
 }
