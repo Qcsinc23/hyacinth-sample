@@ -60,6 +60,22 @@ Package a production build for your local platform:
 npm run package
 ```
 
+Package Windows artifacts (NSIS installer + ZIP):
+
+```bash
+npm run package:win
+```
+
+Run release validation gates:
+
+```bash
+npm run verify:release
+```
+
+GitHub Actions workflow for Windows packaging:
+- Workflow file: `.github/workflows/windows-package.yml`
+- Code signing secrets (optional but recommended): `WINDOWS_CSC_LINK`, `WINDOWS_CSC_KEY_PASSWORD`
+
 ---
 
 ### Project Structure (High Level)
@@ -96,4 +112,3 @@ When adding new features, keep to this style: _small, explicit modules with loud
 ### License
 
 This repository is licensed under the **MIT License**. See `LICENSE` for details.
-
