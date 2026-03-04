@@ -1,0 +1,52 @@
+{
+  "compilerOptions": {
+    "incremental": true,
+    "target": "es2022",
+    "module": "node16",
+    "lib": ["dom", "es2022"],
+    "jsx": "react-jsx",
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true,
+    "strictNullChecks": true,
+    "strictFunctionTypes": true,
+    "strictBindCallApply": true,
+    "strictPropertyInitialization": true,
+    "noImplicitAny": true,
+    "noImplicitThis": true,
+    "alwaysStrict": true,
+    "skipLibCheck": true,
+    "sourceMap": true,
+    "moduleResolution": "node16",
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "resolveJsonModule": true,
+    "allowJs": true,
+    "types": ["node", "jest", "@testing-library/jest-dom"],
+    "outDir": ".erb/dll",
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["src/*"],
+      "@main/*": ["src/main/*"],
+      "@renderer/*": ["src/renderer/*"],
+      "@shared/*": ["src/shared/*"],
+      "@database/*": ["src/main/database/*"],
+      "@services/*": ["src/main/services/*"],
+      "@utils/*": ["src/renderer/utils/*"],
+      "@backup/*": ["src/main/backup/*"],
+      "@settings/*": ["src/main/settings/*"]
+    }
+  },
+  "exclude": [
+    "test",
+    "e2e",
+    "src/__tests__",
+    "src/main/**/*.test.ts",
+    "release/build",
+    "release/app/dist",
+    ".erb/dll",
+    "node_modules"
+  ]
+}

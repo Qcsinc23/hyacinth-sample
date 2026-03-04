@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Hyacinth Medication Label</title>
+  <style>
+    @media print {
+      @page {
+        size: 4in 6in;
+        margin: 0.25in;
+      }
+      body {
+        margin: 0;
+        padding: 0;
+      }
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Arial', 'Helvetica', sans-serif;
+      font-size: 11pt;
+      line-height: 1.4;
+      color: #000;
+      background: #fff;
+      padding: 0.25in;
+      width: 3.5in;
+      min-height: 5.5in;
+    }
+
+    .label-container {
+      border: 2px solid #000;
+      padding: 0.2in;
+      height: 100%;
+      position: relative;
+    }
+
+    .patient-name {
+      font-size: 14pt;
+      font-weight: bold;
+      text-transform: uppercase;
+      border-bottom: 2px solid #000;
+      padding-bottom: 0.1in;
+      margin-bottom: 0.1in;
+    }
+
+    .dispense-date {
+      font-size: 10pt;
+      color: #333;
+      margin-bottom: 0.15in;
+    }
+
+    .section {
+      margin-bottom: 0.15in;
+    }
+
+    .section-title {
+      font-weight: bold;
+      text-transform: uppercase;
+      font-size: 9pt;
+      margin-bottom: 0.05in;
+    }
+
+    .section-content {
+      font-size: 10pt;
+    }
+
+    .medication-name {
+      font-weight: bold;
+      font-size: 11pt;
+    }
+
+    .directions {
+      font-size: 10pt;
+      line-height: 1.5;
+    }
+
+    .clinic-info {
+      margin-top: 0.2in;
+      padding-top: 0.1in;
+      border-top: 1px solid #000;
+      text-align: center;
+      font-size: 9pt;
+    }
+
+    .clinic-name {
+      font-weight: bold;
+      font-size: 10pt;
+    }
+
+    .clinic-address {
+      font-size: 9pt;
+      color: #555;
+    }
+
+    .clinic-phone {
+      font-size: 10pt;
+    }
+
+    .generic-for {
+      font-size: 9pt;
+      color: #555;
+      font-style: italic;
+      margin-top: 0.02in;
+    }
+
+    .rx-number {
+      font-family: 'Courier New', monospace;
+      font-size: 10pt;
+      margin-top: 0.1in;
+    }
+
+    .warnings-section {
+      margin-top: 0.2in;
+      padding: 0.1in;
+      border: 1px solid #000;
+      background-color: #fffff0;
+    }
+
+    .warnings-title {
+      font-weight: bold;
+      font-size: 9pt;
+      margin-bottom: 0.05in;
+    }
+
+    .warning-item {
+      font-size: 9pt;
+      margin-bottom: 0.03in;
+      display: flex;
+      align-items: flex-start;
+    }
+
+    .warning-symbol {
+      margin-right: 0.05in;
+      font-size: 10pt;
+    }
+
+    .warning-text {
+      flex: 1;
+    }
+
+    .indication {
+      font-style: italic;
+    }
+
+    .prescriber {
+      margin-top: 0.1in;
+    }
+
+    /* QR Code Section */
+    .qr-section {
+      position: absolute;
+      top: 0.2in;
+      right: 0.2in;
+      text-align: center;
+    }
+
+    .qr-code {
+      width: 0.7in;
+      height: 0.7in;
+      border: 1px solid #ccc;
+      background-color: #f9f9f9;
+    }
+
+    .qr-label {
+      font-size: 7pt;
+      color: #666;
+      margin-top: 0.02in;
+    }
+
+    /* Barcode Section */
+    .barcode-section {
+      margin-top: 0.15in;
+      text-align: center;
+      padding: 0.1in;
+      border-top: 1px dashed #ccc;
+    }
+
+    .barcode {
+      font-family: 'Courier New', monospace;
+      font-size: 14pt;
+      letter-spacing: 2px;
+      background: repeating-linear-gradient(
+        90deg,
+        #000 0px,
+        #000 2px,
+        #fff 2px,
+        #fff 4px
+      );
+      height: 0.3in;
+      line-height: 0.3in;
+      color: transparent;
+    }
+
+    .barcode-text {
+      font-family: 'Courier New', monospace;
+      font-size: 9pt;
+      margin-top: 0.02in;
+    }
+
+    /* Lot Information */
+    .lot-info {
+      margin-top: 0.1in;
+      padding: 0.08in;
+      background-color: #f0f8ff;
+      border: 1px solid #b0c4de;
+      font-size: 9pt;
+    }
+
+    .lot-info-title {
+      font-weight: bold;
+      font-size: 8pt;
+      color: #4a5568;
+    }
+
+    .lot-info-row {
+      display: flex;
+      justify-content: space-between;
+    }
+
+    /* Warning symbols */
+    .warning-icon {
+      display: inline-block;
+      width: 14px;
+      height: 14px;
+      text-align: center;
+      line-height: 14px;
+      border-radius: 50%;
+      font-size: 10px;
+      margin-right: 4px;
+    }
+
+    .warning-icon.caution {
+      background-color: #fbbf24;
+      color: #000;
+    }
+
+    .warning-icon.danger {
+      background-color: #ef4444;
+      color: #fff;
+    }
+
+    .warning-icon.info {
+      background-color: #3b82f6;
+      color: #fff;
+    }
+
+    /* Footer */
+    .label-footer {
+      margin-top: 0.15in;
+      padding-top: 0.1in;
+      border-top: 1px solid #ccc;
+      text-align: center;
+      font-size: 8pt;
+      color: #666;
+    }
+  </style>
+</head>
+<body>
+  <div class="label-container">
+    <!-- QR Code (if enabled) -->
+    {{#if qrCodeUrl}}
+    <div class="qr-section">
+      <img class="qr-code" src="{{qrCodeUrl}}" alt="QR Code">
+      <div class="qr-label">Scan for info</div>
+    </div>
+    {{/if}}
+
+    <!-- Patient Name -->
+    <div class="patient-name">{{patientName}}</div>
+
+    <!-- NJ: Date of Dispensing -->
+    <div class="dispense-date">Dispensed: {{dispenseDate}}</div>
+
+    <!-- NJ: Medication Name, Strength, Form -->
+    <div class="section">
+      <div class="section-title">Medication</div>
+      <div class="section-content medication-name">{{medicationName}} {{medicationStrength}}{{#if dosageForm}} {{dosageForm}}{{/if}}</div>
+      {{#if genericFor}}
+      <div class="section-content generic-for">Generic for {{genericFor}}</div>
+      {{/if}}
+    </div>
+
+    <!-- Quantity -->
+    <div class="section">
+      <div class="section-title">Quantity</div>
+      <div class="section-content">{{quantity}} {{unit}} ({{daySupply}}-day supply)</div>
+    </div>
+
+    <!-- Directions -->
+    <div class="section">
+      <div class="section-title">Directions</div>
+      <div class="section-content directions">{{directions}}</div>
+    </div>
+
+    <!-- Indication -->
+    <div class="section">
+      <div class="section-title">Indication</div>
+      <div class="section-content indication">{{indication}}</div>
+    </div>
+
+    <!-- Prescribed By -->
+    <div class="section prescriber">
+      <div class="section-title">Prescribed By</div>
+      <div class="section-content">{{prescribedBy}}</div>
+    </div>
+
+    <!-- NJ: Lot and Use By / Expiration (required for non-manufacturer packaging) -->
+    {{#if lotNumber}}
+    <div class="lot-info">
+      <div class="lot-info-title">INVENTORY INFORMATION</div>
+      <div class="lot-info-row">
+        <span>Lot: {{lotNumber}}</span>
+        {{#if expirationDate}}
+        <span>Use By: {{expirationDate}}</span>
+        {{/if}}
+      </div>
+    </div>
+    {{/if}}
+
+    <!-- NJ 13:39-7.12: Clinic Name, Address, Phone -->
+    <div class="clinic-info">
+      <div class="clinic-name">Hyacinth Health & Wellness Clinic</div>
+      <div class="clinic-address">317 George St, New Brunswick, NJ 08901</div>
+      <div class="clinic-phone">(862) 240-1461</div>
+      <div class="rx-number">Rx #: {{rxNumber}}</div>
+    </div>
+
+    <!-- Warnings -->
+    <div class="warnings-section">
+      <div class="warnings-title">Important Information:</div>
+      {{#each warnings}}
+      <div class="warning-item">
+        <span class="warning-symbol">⚠️</span>
+        <span class="warning-text">{{this}}</span>
+      </div>
+      {{/each}}
+      {{#unless warnings.length}}
+      <div class="warning-item">
+        <span class="warning-symbol warning-icon info">ℹ</span>
+        <span class="warning-text">Take as directed. Contact clinic for questions.</span>
+      </div>
+      {{/unless}}
+    </div>
+
+    <!-- Barcode -->
+    <div class="barcode-section">
+      <div class="barcode">{{rxNumber}}</div>
+      <div class="barcode-text">{{rxNumber}}</div>
+    </div>
+
+    <!-- Footer -->
+    <div class="label-footer">
+      Keep this label with your medication
+    </div>
+  </div>
+</body>
+</html>

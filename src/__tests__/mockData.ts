@@ -1,0 +1,665 @@
+/**
+ * Mock Data for Hyacinth Tests
+ * Contains mock data matching the PRD medications and real-world scenarios
+ */
+
+import type { 
+  Patient, 
+  StaffMember, 
+  Inventory, 
+  DispensingRecord, 
+  DispensingLineItem,
+  RecordReason,
+  InventoryAlert,
+  StaffRole 
+} from '../shared/types';
+
+// ============================================================================
+// Staff / Authentication
+// ============================================================================
+
+export const mockStaffMembers: StaffMember[] = [
+  {
+    id: 1,
+    first_name: 'Sarah',
+    last_name: 'Johnson',
+    pin_hash: '$2b$10$hashedpin1234',
+    role: 'admin' as StaffRole,
+    is_active: true,
+    last_login_at: '2024-01-15T08:30:00Z',
+    created_at: '2024-01-01T00:00:00Z',
+    updated_at: '2024-01-15T08:30:00Z',
+  },
+  {
+    id: 2,
+    first_name: 'Michael',
+    last_name: 'Chen',
+    pin_hash: '$2b$10$hashedpin5678',
+    role: 'dispenser' as StaffRole,
+    is_active: true,
+    last_login_at: '2024-01-15T09:00:00Z',
+    created_at: '2024-01-01T00:00:00Z',
+    updated_at: '2024-01-15T09:00:00Z',
+  },
+  {
+    id: 3,
+    first_name: 'Emily',
+    last_name: 'Davis',
+    pin_hash: '$2b$10$hashedpin9012',
+    role: 'dispenser' as StaffRole,
+    is_active: false,
+    last_login_at: null,
+    created_at: '2024-01-01T00:00:00Z',
+    updated_at: '2024-01-10T00:00:00Z',
+  },
+];
+
+export const mockValidPins = {
+  admin: '1234',
+  dispenser: '5678',
+  inactive: '9012',
+};
+
+// ============================================================================
+// Patients
+// ============================================================================
+
+export const mockPatients: Patient[] = [
+  {
+    id: 1,
+    chart_number: 'HC001234',
+    first_name: 'James',
+    last_name: 'Wilson',
+    dob: '1985-03-15',
+    phone: '555-123-4567',
+    email: 'j.wilson@email.com',
+    address: '123 Main St, New York, NY 10001',
+    notes: 'Patient prefers afternoon appointments',
+    is_active: true,
+    created_at: '2024-01-01T00:00:00Z',
+    updated_at: '2024-01-10T00:00:00Z',
+  },
+  {
+    id: 2,
+    chart_number: 'HC001235',
+    first_name: 'Maria',
+    last_name: 'Garcia',
+    dob: '1990-07-22',
+    phone: '555-987-6543',
+    email: 'maria.g@email.com',
+    address: '456 Oak Ave, Brooklyn, NY 11201',
+    notes: null,
+    is_active: true,
+    created_at: '2024-01-02T00:00:00Z',
+    updated_at: '2024-01-02T00:00:00Z',
+  },
+  {
+    id: 3,
+    chart_number: 'HC001236',
+    first_name: 'Robert',
+    last_name: "O'Connor",
+    dob: '1978-11-08',
+    phone: '555-456-7890',
+    email: null,
+    address: null,
+    notes: 'Requires Spanish interpreter',
+    is_active: true,
+    created_at: '2024-01-03T00:00:00Z',
+    updated_at: '2024-01-03T00:00:00Z',
+  },
+  {
+    id: 4,
+    chart_number: 'HC001237',
+    first_name: 'Jennifer',
+    last_name: 'McDonald',
+    dob: '1992-01-30',
+    phone: '555-789-0123',
+    email: 'jenny.m@email.com',
+    address: '789 Pine St, Queens, NY 11385',
+    notes: null,
+    is_active: false,
+    created_at: '2024-01-04T00:00:00Z',
+    updated_at: '2024-01-05T00:00:00Z',
+  },
+  {
+    id: 5,
+    chart_number: 'HC001238',
+    first_name: 'David',
+    last_name: 'Smith-Jones',
+    dob: '1988-05-12',
+    phone: '555-321-6547',
+    email: 'd.smith@email.com',
+    address: '321 Elm St, Bronx, NY 10451',
+    notes: 'Allergic to sulfa drugs',
+    is_active: true,
+    created_at: '2024-01-05T00:00:00Z',
+    updated_at: '2024-01-05T00:00:00Z',
+  },
+];
+
+// ============================================================================
+// Inventory - PRD Medications
+// ============================================================================
+
+export const mockInventory: Inventory[] = [
+  // Biktarvy variants
+  {
+    id: 1,
+    medication_name: 'Biktarvy (nPEP)',
+    lot_number: 'BKT2024A001',
+    ndc_code: '61958-2301-1',
+    expiration_date: '2025-12-31',
+    quantity_received: 100,
+    quantity_on_hand: 45,
+    unit: 'tablets',
+    supplier: 'Gilead Sciences',
+    supplier_invoice: 'INV-2024-001',
+    cost_per_unit: 125.5,
+    received_date: '2024-01-01',
+    received_by: 1,
+    reorder_threshold: 30,
+    storage_location: 'Cabinet A1',
+    status: 'active',
+    notes: null,
+    created_at: '2024-01-01T00:00:00Z',
+    updated_at: '2024-01-15T00:00:00Z',
+  },
+  {
+    id: 2,
+    medication_name: 'Biktarvy (ID)',
+    lot_number: 'BKT2024B002',
+    ndc_code: '61958-2301-1',
+    expiration_date: '2026-06-30',
+    quantity_received: 200,
+    quantity_on_hand: 150,
+    unit: 'tablets',
+    supplier: 'Gilead Sciences',
+    supplier_invoice: 'INV-2024-002',
+    cost_per_unit: 125.5,
+    received_date: '2024-01-05',
+    received_by: 1,
+    reorder_threshold: 30,
+    storage_location: 'Cabinet A2',
+    status: 'active',
+    notes: null,
+    created_at: '2024-01-05T00:00:00Z',
+    updated_at: '2024-01-15T00:00:00Z',
+  },
+  {
+    id: 3,
+    medication_name: 'Biktarvy (PrEP)',
+    lot_number: 'BKT2024C003',
+    ndc_code: '61958-2301-1',
+    expiration_date: '2026-03-15',
+    quantity_received: 150,
+    quantity_on_hand: 25, // Low stock
+    unit: 'tablets',
+    supplier: 'Gilead Sciences',
+    supplier_invoice: 'INV-2024-003',
+    cost_per_unit: 125.5,
+    received_date: '2024-01-10',
+    received_by: 2,
+    reorder_threshold: 30,
+    storage_location: 'Cabinet A3',
+    status: 'active',
+    notes: null,
+    created_at: '2024-01-10T00:00:00Z',
+    updated_at: '2024-01-15T00:00:00Z',
+  },
+  // Descovy
+  {
+    id: 4,
+    medication_name: 'Descovy',
+    lot_number: 'DSC2024A001',
+    ndc_code: '61958-2901-1',
+    expiration_date: '2025-02-28', // Expiring soon
+    quantity_received: 120,
+    quantity_on_hand: 80,
+    unit: 'tablets',
+    supplier: 'Gilead Sciences',
+    supplier_invoice: 'INV-2024-004',
+    cost_per_unit: 98.75,
+    received_date: '2024-01-08',
+    received_by: 1,
+    reorder_threshold: 30,
+    storage_location: 'Cabinet B1',
+    status: 'active',
+    notes: null,
+    created_at: '2024-01-08T00:00:00Z',
+    updated_at: '2024-01-15T00:00:00Z',
+  },
+  // Symtuza
+  {
+    id: 5,
+    medication_name: 'Symtuza',
+    lot_number: 'SYM2024A001',
+    ndc_code: '59676-290-30',
+    expiration_date: '2026-09-20',
+    quantity_received: 90,
+    quantity_on_hand: 0, // Out of stock
+    unit: 'tablets',
+    supplier: 'Janssen Pharmaceuticals',
+    supplier_invoice: 'INV-2024-005',
+    cost_per_unit: 145.0,
+    received_date: '2024-01-12',
+    received_by: 2,
+    reorder_threshold: 20,
+    storage_location: 'Cabinet B2',
+    status: 'depleted',
+    notes: null,
+    created_at: '2024-01-12T00:00:00Z',
+    updated_at: '2024-01-14T00:00:00Z',
+  },
+  // Dovato
+  {
+    id: 6,
+    medication_name: 'Dovato',
+    lot_number: 'DOV2024A001',
+    ndc_code: '0173-0884-30',
+    expiration_date: '2025-11-15',
+    quantity_received: 60,
+    quantity_on_hand: 55,
+    unit: 'tablets',
+    supplier: 'ViiV Healthcare',
+    supplier_invoice: 'INV-2024-006',
+    cost_per_unit: 135.25,
+    received_date: '2024-01-03',
+    received_by: 1,
+    reorder_threshold: 15,
+    storage_location: 'Cabinet C1',
+    status: 'active',
+    notes: null,
+    created_at: '2024-01-03T00:00:00Z',
+    updated_at: '2024-01-15T00:00:00Z',
+  },
+  // Bactrim
+  {
+    id: 7,
+    medication_name: 'Bactrim',
+    lot_number: 'BCT2024A001',
+    ndc_code: '0093-2110-01',
+    expiration_date: '2024-08-30', // Expiring soon
+    quantity_received: 200,
+    quantity_on_hand: 15, // Low stock
+    unit: 'tablets',
+    supplier: 'Sun Pharmaceutical',
+    supplier_invoice: 'INV-2024-007',
+    cost_per_unit: 12.5,
+    received_date: '2024-01-02',
+    received_by: 2,
+    reorder_threshold: 20,
+    storage_location: 'Cabinet D1',
+    status: 'active',
+    notes: null,
+    created_at: '2024-01-02T00:00:00Z',
+    updated_at: '2024-01-15T00:00:00Z',
+  },
+  // Doxycycline
+  {
+    id: 8,
+    medication_name: 'Doxycycline',
+    lot_number: 'DOX2024A001',
+    ndc_code: '0093-2273-01',
+    expiration_date: '2025-04-20',
+    quantity_received: 500,
+    quantity_on_hand: 350,
+    unit: 'capsules',
+    supplier: 'Heritage Pharmaceuticals',
+    supplier_invoice: 'INV-2024-008',
+    cost_per_unit: 8.75,
+    received_date: '2024-01-06',
+    received_by: 1,
+    reorder_threshold: 50,
+    storage_location: 'Cabinet D2',
+    status: 'active',
+    notes: null,
+    created_at: '2024-01-06T00:00:00Z',
+    updated_at: '2024-01-15T00:00:00Z',
+  },
+  // Expired item
+  {
+    id: 9,
+    medication_name: 'Bactrim',
+    lot_number: 'BCT2023A001',
+    ndc_code: '0093-2110-01',
+    expiration_date: '2023-12-31', // Already expired
+    quantity_received: 100,
+    quantity_on_hand: 0,
+    unit: 'tablets',
+    supplier: 'Sun Pharmaceutical',
+    supplier_invoice: 'INV-2023-015',
+    cost_per_unit: 12.5,
+    received_date: '2023-06-01',
+    received_by: 1,
+    reorder_threshold: 20,
+    storage_location: 'Cabinet D3',
+    status: 'expired',
+    notes: 'Expired - awaiting disposal',
+    created_at: '2023-06-01T00:00:00Z',
+    updated_at: '2024-01-01T00:00:00Z',
+  },
+];
+
+// ============================================================================
+// Dispensing Records
+// ============================================================================
+
+export const mockDispensingLineItems: DispensingLineItem[] = [
+  {
+    id: 1,
+    record_id: 1,
+    medication_name: 'Biktarvy (nPEP)',
+    is_custom_medication: false,
+    amount_value: 30,
+    amount_unit: 'tablets',
+    lot_number: 'BKT2024A001',
+    expiration_date: '2025-12-31',
+    inventory_id: 1,
+    dosing_instructions: 'Take once daily with food',
+    created_at: '2024-01-15T10:30:00Z',
+  },
+  {
+    id: 2,
+    record_id: 2,
+    medication_name: 'Descovy',
+    is_custom_medication: false,
+    amount_value: 30,
+    amount_unit: 'tablets',
+    lot_number: 'DSC2024A001',
+    expiration_date: '2025-02-28',
+    inventory_id: 4,
+    dosing_instructions: 'Take once daily',
+    created_at: '2024-01-15T11:00:00Z',
+  },
+  {
+    id: 3,
+    record_id: 3,
+    medication_name: 'Bactrim',
+    is_custom_medication: false,
+    amount_value: 14,
+    amount_unit: 'tablets',
+    lot_number: 'BCT2024A001',
+    expiration_date: '2024-08-30',
+    inventory_id: 7,
+    dosing_instructions: 'Take twice daily for 7 days',
+    created_at: '2024-01-15T14:00:00Z',
+  },
+  {
+    id: 4,
+    record_id: 4,
+    medication_name: 'Symtuza',
+    is_custom_medication: false,
+    amount_value: 30,
+    amount_unit: 'tablets',
+    lot_number: 'SYM2024A001',
+    expiration_date: '2026-09-20',
+    inventory_id: 5,
+    dosing_instructions: 'Take once daily with food',
+    created_at: '2024-01-14T09:00:00Z',
+  },
+];
+
+export const mockRecordReasons: RecordReason[] = [
+  { id: 1, record_id: 1, reason_name: 'nPEP Initiation', is_custom: false },
+  { id: 2, record_id: 2, reason_name: 'Rapid Initiation PrEP', is_custom: false },
+  { id: 3, record_id: 3, reason_name: 'STI/UTI Treatment', is_custom: false },
+  { id: 4, record_id: 4, reason_name: 'ADDP Application Pending', is_custom: false },
+];
+
+export const mockDispensingRecords: DispensingRecord[] = [
+  {
+    id: 1,
+    patient_id: 1,
+    dispensing_date: '2024-01-15',
+    dispensing_time: '10:30:00',
+    staff_id: 1,
+    label_quantity: 30,
+    additional_notes: 'First nPEP dispense',
+    status: 'completed',
+    void_reason: null,
+    voided_by: null,
+    voided_at: null,
+    correction_of: null,
+    corrected_by: null,
+    correction_reason: null,
+    created_at: '2024-01-15T10:30:00Z',
+    updated_at: '2024-01-15T10:30:00Z',
+  },
+  {
+    id: 2,
+    patient_id: 2,
+    dispensing_date: '2024-01-15',
+    dispensing_time: '11:00:00',
+    staff_id: 2,
+    label_quantity: 30,
+    additional_notes: null,
+    status: 'completed',
+    void_reason: null,
+    voided_by: null,
+    voided_at: null,
+    correction_of: null,
+    corrected_by: null,
+    correction_reason: null,
+    created_at: '2024-01-15T11:00:00Z',
+    updated_at: '2024-01-15T11:00:00Z',
+  },
+  {
+    id: 3,
+    patient_id: 3,
+    dispensing_date: '2024-01-15',
+    dispensing_time: '14:00:00',
+    staff_id: 1,
+    label_quantity: 14,
+    additional_notes: null,
+    status: 'completed',
+    void_reason: null,
+    voided_by: null,
+    voided_at: null,
+    correction_of: null,
+    corrected_by: null,
+    correction_reason: null,
+    created_at: '2024-01-15T14:00:00Z',
+    updated_at: '2024-01-15T14:00:00Z',
+  },
+  {
+    id: 4,
+    patient_id: 1,
+    dispensing_date: '2024-01-14',
+    dispensing_time: '09:00:00',
+    staff_id: 2,
+    label_quantity: 30,
+    additional_notes: null,
+    status: 'voided',
+    void_reason: 'Incorrect medication dispensed',
+    voided_by: 1,
+    voided_at: '2024-01-14T10:00:00Z',
+    correction_of: null,
+    corrected_by: null,
+    correction_reason: null,
+    created_at: '2024-01-14T09:00:00Z',
+    updated_at: '2024-01-14T10:00:00Z',
+  },
+  {
+    id: 5,
+    patient_id: 2,
+    dispensing_date: '2024-01-13',
+    dispensing_time: '15:30:00',
+    staff_id: 1,
+    label_quantity: 30,
+    additional_notes: 'Corrected version',
+    status: 'completed',
+    void_reason: null,
+    voided_by: null,
+    voided_at: null,
+    correction_of: 6,
+    corrected_by: 1,
+    correction_reason: 'Wrong quantity on original',
+    created_at: '2024-01-13T15:30:00Z',
+    updated_at: '2024-01-13T15:30:00Z',
+  },
+  {
+    id: 6,
+    patient_id: 2,
+    dispensing_date: '2024-01-13',
+    dispensing_time: '15:00:00',
+    staff_id: 2,
+    label_quantity: 60,
+    additional_notes: null,
+    status: 'corrected',
+    void_reason: null,
+    voided_by: null,
+    voided_at: null,
+    correction_of: null,
+    corrected_by: null,
+    correction_reason: null,
+    created_at: '2024-01-13T15:00:00Z',
+    updated_at: '2024-01-13T15:30:00Z',
+  },
+];
+
+// ============================================================================
+// Alerts
+// ============================================================================
+
+export const mockInventoryAlerts: InventoryAlert[] = [
+  {
+    id: 1,
+    inventory_id: 3,
+    alert_type: 'low_stock',
+    severity: 'warning',
+    message: 'Biktarvy (PrEP) (Lot: BKT2024C003) is low on stock: 25 remaining',
+    is_acknowledged: false,
+    acknowledged_by: null,
+    acknowledged_at: null,
+    auto_resolved: false,
+    resolved_at: null,
+    created_at: '2024-01-15T00:00:00Z',
+  },
+  {
+    id: 2,
+    inventory_id: 4,
+    alert_type: 'expiring_soon',
+    severity: 'warning',
+    message: 'Descovy (Lot: DSC2024A001) expires in 44 days',
+    is_acknowledged: true,
+    acknowledged_by: 1,
+    acknowledged_at: '2024-01-15T08:00:00Z',
+    auto_resolved: false,
+    resolved_at: null,
+    created_at: '2024-01-10T00:00:00Z',
+  },
+  {
+    id: 3,
+    inventory_id: 7,
+    alert_type: 'low_stock',
+    severity: 'warning',
+    message: 'Bactrim (Lot: BCT2024A001) is low on stock: 15 remaining',
+    is_acknowledged: false,
+    acknowledged_by: null,
+    acknowledged_at: null,
+    auto_resolved: false,
+    resolved_at: null,
+    created_at: '2024-01-14T00:00:00Z',
+  },
+  {
+    id: 4,
+    inventory_id: 9,
+    alert_type: 'expired',
+    severity: 'critical',
+    message: 'Bactrim (Lot: BCT2023A001) has expired on 2023-12-31',
+    is_acknowledged: true,
+    acknowledged_by: 1,
+    acknowledged_at: '2024-01-01T09:00:00Z',
+    auto_resolved: false,
+    resolved_at: null,
+    created_at: '2024-01-01T00:00:00Z',
+  },
+];
+
+// ============================================================================
+// Form Input Data
+// ============================================================================
+
+export const validPatientInput = {
+  firstName: 'John',
+  lastName: 'Doe',
+  dateOfBirth: '1990-01-01',
+  email: 'john.doe@example.com',
+  phone: '555-123-4567',
+};
+
+export const invalidPatientInput = {
+  firstName: '',
+  lastName: 'A',
+  dateOfBirth: '2050-01-01', // Future date
+  email: 'invalid-email',
+  phone: '123', // Too short
+};
+
+export const validDispensingInput = {
+  patientId: '1',
+  medication: 'Biktarvy (nPEP)',
+  quantity: 30,
+  unit: 'tablets',
+  reason: 'nPEP Initiation',
+  prescribedBy: 'Dr. Sarah Johnson',
+  prescribedDate: new Date().toISOString().split('T')[0],
+};
+
+export const invalidDispensingInput = {
+  patientId: '',
+  medication: 'Invalid Medication',
+  quantity: -5,
+  unit: '',
+  reason: 'Invalid Reason',
+  prescribedBy: '',
+  prescribedDate: '2020-01-01', // Too old
+};
+
+export const validInventoryInput = {
+  medication: 'Biktarvy (nPEP)',
+  quantity: 100,
+  unit: 'tablets',
+  lotNumber: 'BKT2024A002',
+  expirationDate: '2026-12-31',
+};
+
+export const invalidInventoryInput = {
+  medication: '',
+  quantity: -10,
+  unit: '',
+  lotNumber: 'AB',
+  expirationDate: '2020-01-01', // Past date
+};
+
+// ============================================================================
+// CSV Export Expected Format
+// ============================================================================
+
+export const expectedCsvHeaders = [
+  'id',
+  'patientId',
+  'patientName',
+  'medication',
+  'quantity',
+  'unit',
+  'reason',
+  'prescribedBy',
+  'prescribedDate',
+  'dispensedAt',
+  'notes',
+];
+
+export const sampleCsvRow = {
+  id: '1',
+  patientId: 'HC001234',
+  patientName: 'Wilson, James',
+  medication: 'Biktarvy (nPEP)',
+  quantity: '30',
+  unit: 'tablets',
+  reason: 'nPEP Initiation',
+  prescribedBy: 'Dr. Sarah Johnson',
+  prescribedDate: '2024-01-15',
+  dispensedAt: '2024-01-15 10:30',
+  notes: 'First nPEP dispense',
+};
