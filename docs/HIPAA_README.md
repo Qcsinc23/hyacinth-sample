@@ -327,9 +327,11 @@ const csv = exportAuditReportToCSV(report);
 
 For questions about HIPAA compliance implementation:
 
-**Security Officer:** [Contact Information]  
-**Privacy Officer:** [Contact Information]  
-**Technical Support:** [Contact Information]
+**Security Officer:** [Configure in your organization's documentation]  
+**Privacy Officer:** [Configure in your organization's documentation]  
+**Technical Support:** [Configure in your organization's documentation]
+
+> **Note:** Contact information must be configured before production deployment. See [DEPLOYMENT.md](DEPLOYMENT.md) for setup instructions.
 
 ---
 

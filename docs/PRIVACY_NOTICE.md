@@ -288,19 +288,21 @@ Reportable incidents include:
 
 For questions about this Privacy Notice or to exercise patient rights:
 
-**Name:** [Privacy Officer Name]  
+**Name:** [Configure before deployment - Privacy Officer Name]  
 **Address:** [Organization Address]  
 **Phone:** [Phone Number]  
-**Email:** [Email Address]  
+**Email:** [Email Address]
 
 ### 11.2 Security Officer
 
 For security-related concerns or to report incidents:
 
-**Name:** [Security Officer Name]  
+**Name:** [Configure before deployment - Security Officer Name]  
 **Address:** [Organization Address]  
 **Phone:** [Phone Number]  
-**Email:** [Email Address]  
+**Email:** [Email Address]
+
+> **Important:** All contact information above must be configured with actual contacts before production deployment. See [DEPLOYMENT.md](DEPLOYMENT.md) for the deployment checklist.
 
 ### 11.3 Department of Health and Human Services
 
