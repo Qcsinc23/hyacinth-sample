@@ -11,7 +11,7 @@ interface PinInputProps {
 }
 
 export const PinInput: React.FC<PinInputProps> = ({
-  length = 4,
+  length = 6,
   value,
   onComplete,
   onChange,
@@ -83,15 +83,9 @@ export const PinInput: React.FC<PinInputProps> = ({
     } else if (e.key === 'ArrowLeft' && index > 0) {
       inputRefs.current[index - 1]?.focus();
       setFocusedIndex(index - 1);
-    } else if (e.key === 'ArrowLeft') {
-      inputRefs.current[index]?.focus();
-      setFocusedIndex(index);
     } else if (e.key === 'ArrowRight' && index < length - 1) {
       inputRefs.current[index + 1]?.focus();
       setFocusedIndex(index + 1);
-    } else if (e.key === 'ArrowRight') {
-      inputRefs.current[index]?.focus();
-      setFocusedIndex(index);
     }
   };
 
@@ -122,17 +116,9 @@ export const PinInput: React.FC<PinInputProps> = ({
     }
   };
 
-  // Clear function - can be exposed via ref if needed
-  // const clear = () => {
-  //   setPin(new Array(length).fill(''));
-  //   inputRefs.current[0]?.focus();
-  //   setFocusedIndex(0);
-  //   onChange?.('');
-  // };
-
   return (
     <div className="flex flex-col items-center">
-      <div className="flex gap-2">
+      <div className="flex gap-3">
         {pin.map((digit, index) => (
           <input
             key={index}
@@ -148,21 +134,23 @@ export const PinInput: React.FC<PinInputProps> = ({
             onPaste={handlePaste}
             onFocus={() => setFocusedIndex(index)}
             className={`
-              w-12 h-14 text-center text-2xl font-bold rounded-lg border-2 
-              transition-all duration-200 focus:outline-none focus:ring-2
+              w-12 h-14 text-center text-2xl font-semibold rounded-xl border-2 
+              transition-all duration-200 focus:outline-none
               ${error 
-                ? 'border-red-500 focus:border-red-500 focus:ring-red-200' 
-                : 'border-gray-300 focus:border-blue-500 focus:ring-blue-200'
+                ? 'border-red-400 focus:border-red-500 focus:ring-4 focus:ring-red-100' 
+                : digit
+                  ? 'border-emerald-500 bg-emerald-50 text-gray-900'
+                  : 'border-gray-200 bg-gray-50 text-gray-400'
               }
-              ${disabled ? 'bg-gray-100 cursor-not-allowed' : 'bg-white'}
-              ${focusedIndex === index ? 'ring-2 ring-blue-200' : ''}
+              ${disabled ? 'bg-gray-100 cursor-not-allowed' : ''}
+              ${focusedIndex === index && !digit ? 'ring-4 ring-emerald-100 border-emerald-400' : ''}
             `}
-            aria-label={`PIN digit ${index + 1}`}
+            aria-label={`PIN digit ${index + 1} of ${length}`}
           />
         ))}
       </div>
       {error && (
-        <p className="mt-2 text-sm text-red-600">
+        <p className="mt-3 text-sm text-red-600 font-medium">
           {error}
         </p>
       )}
